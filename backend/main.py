@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from database import init_db
-from routers import scan
+from routers import scan, files, rules
 
 
 @asynccontextmanager
@@ -30,6 +30,8 @@ app.add_middleware(
 )
 
 app.include_router(scan.router)
+app.include_router(files.router)
+app.include_router(rules.router)
 
 
 @app.get("/health")

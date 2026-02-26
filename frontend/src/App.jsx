@@ -14,6 +14,7 @@ export default function App() {
         <Route path="/scan" element={<Scan />} />
         <Route path="/result" element={<Result />} />
         <Route path="/rules" element={<RuleManager />} />
+        <Route path="/apply" element={<Settings />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     </HashRouter>

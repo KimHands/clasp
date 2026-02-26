@@ -1,6 +1,6 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-02-26T01:05:32.519Z",
+  "lastUpdated": "2026-02-26T01:12:44.226Z",
   "activeFeatures": [
     "backend",
     "__init__.py",
@@ -11,7 +11,9 @@
     "api",
     "electron",
     "cover_service.py",
-    "scan_service.py"
+    "scan_service.py",
+    "classify_service.py",
+    "graph"
   ],
   "primaryFeature": "backend",
   "features": {
@@ -24,7 +26,7 @@
       "documents": {},
       "timestamps": {
         "started": "2026-02-26T00:43:51.555Z",
-        "lastUpdated": "2026-02-26T01:04:49.779Z"
+        "lastUpdated": "2026-02-26T01:09:42.046Z"
       },
       "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/backend/main.py"
     },
@@ -63,9 +65,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-02-26T00:46:45.802Z",
-        "lastUpdated": "2026-02-26T01:05:32.519Z"
+        "lastUpdated": "2026-02-26T01:12:44.225Z"
       },
-      "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/frontend/src/pages/Home.jsx"
+      "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/frontend/src/App.jsx"
     },
     "ui": {
       "phase": "do",
@@ -144,6 +146,32 @@
         "lastUpdated": "2026-02-26T01:04:31.861Z"
       },
       "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/backend/services/scan_service.py"
+    },
+    "classify_service.py": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-02-26T01:09:06.359Z",
+        "lastUpdated": "2026-02-26T01:09:06.359Z"
+      },
+      "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/backend/services/classify_service.py"
+    },
+    "graph": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-02-26T01:10:48.146Z",
+        "lastUpdated": "2026-02-26T01:10:48.146Z"
+      },
+      "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/frontend/src/graph/cytoscapeConfig.js"
     }
   },
   "pipeline": {
@@ -154,7 +182,7 @@
   "session": {
     "startedAt": "2026-02-26T00:43:51.555Z",
     "onboardingCompleted": false,
-    "lastActivity": "2026-02-26T01:05:32.519Z"
+    "lastActivity": "2026-02-26T01:12:44.226Z"
   },
   "history": [
     {
@@ -411,6 +439,72 @@
     },
     {
       "timestamp": "2026-02-26T01:05:32.519Z",
+      "feature": "frontend",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:09:06.359Z",
+      "feature": "classify_service.py",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:09:25.011Z",
+      "feature": "backend",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:09:35.209Z",
+      "feature": "backend",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:09:38.868Z",
+      "feature": "backend",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:09:42.046Z",
+      "feature": "backend",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:10:48.146Z",
+      "feature": "graph",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:10:56.844Z",
+      "feature": "frontend",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:11:20.330Z",
+      "feature": "frontend",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:11:59.936Z",
+      "feature": "frontend",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:12:35.053Z",
+      "feature": "frontend",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:12:44.226Z",
       "feature": "frontend",
       "phase": "do",
       "action": "updated"

@@ -17,5 +17,15 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          cytoscape: ['cytoscape', 'cytoscape-fcose'],
+          vendor: ['react', 'react-dom', 'react-router-dom'],
+          ui: ['@radix-ui/react-slot', '@radix-ui/react-dialog', 'lucide-react'],
+        },
+      },
+    },
   },
 })
