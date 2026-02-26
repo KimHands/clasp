@@ -128,10 +128,12 @@ async def run_scan(
         # Stage 3: 표지 탐지
         yield {"stage": 3, "message": "표지 탐지 중", "total": total, "completed": 0, "current_file": ""}
 
+        cover_texts: dict[str, str | None] = {}
         cover_count = 0
         for i, fpath in enumerate(file_paths):
             filename = os.path.basename(fpath)
             cover_text = await asyncio.to_thread(extract_cover_text, fpath)
+            cover_texts[fpath] = cover_text
             if cover_text:
                 file_record = file_records[fpath]
                 save_cover(db, file_record.id, cover_text)
@@ -185,6 +187,7 @@ async def run_scan(
                 filename=filename,
                 extension=extension,
                 extracted_text=text,
+                cover_text=cover_texts.get(fpath),
                 db=db,
                 manual_category=manual_category,
             )

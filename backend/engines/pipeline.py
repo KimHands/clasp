@@ -25,10 +25,12 @@ async def classify(
     extracted_text: Optional[str],
     db: Session,
     manual_category: Optional[str] = None,
+    cover_text: Optional[str] = None,
 ) -> dict:
     """
     Tier 1 → 2 → 3 순차 실행
     각 Tier 결과의 confidence_score 기준으로 다음 Tier 실행 여부 결정
+    cover_text: 표지 탐지 결과 — 본문 추출이 없는 경우 T2 입력으로 fallback 활용
     반환: { category, tag, tier_used, confidence_score }
     """
 
@@ -46,13 +48,17 @@ async def classify(
         return {**t1, "tier_used": 1}
 
     # 텍스트 추출 불가 확장자는 Tier 2 호출 없이 Tier 1 결과 반환
+    # 단, 표지 텍스트가 있으면 T2 시도 가능
     ext_lower = extension.lstrip(".").lower()
-    if ext_lower in _NON_TEXT_EXTENSIONS:
+    if ext_lower in _NON_TEXT_EXTENSIONS and not cover_text:
         return {**t1, "tier_used": 1}
 
-    # Tier 2: 임베딩 유사도 (텍스트 있을 때만)
-    if extracted_text:
-        t2 = tier2_embedding.run(extracted_text)
+    # T2에 사용할 텍스트 결정: 본문 추출 우선, 없으면 표지 텍스트로 fallback
+    t2_input = extracted_text or cover_text
+
+    # Tier 2: 임베딩 유사도
+    if t2_input:
+        t2 = tier2_embedding.run(t2_input)
 
         # Tier 1과 Tier 2가 같은 카테고리를 가리키면 앙상블 신뢰도 보정
         if (
@@ -77,8 +83,10 @@ async def classify(
             }
 
         # Tier 3: 클라우드 LLM (Tier 2 threshold 미달 + API Key 있을 때)
+        # 표지 텍스트만 있는 경우 Tier 3 입력으로도 활용
+        t3_input = extracted_text or cover_text
         if tier3_llm.is_available():
-            t3 = await tier3_llm.run(extracted_text, filename)
+            t3 = await tier3_llm.run(t3_input, filename)
             if t3["confidence_score"] > max(t1["confidence_score"], t2["confidence_score"]):
                 return {**t3, "tier_used": 3}
 
