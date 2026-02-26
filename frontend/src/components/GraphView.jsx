@@ -317,11 +317,26 @@ export default function GraphView({ files, folderName, onNodeClick }) {
   const [zoom, setZoom] = useState(1)
   const [dragging, setDragging] = useState(false)
   const dragStart = useRef(null)
+  const initialCollapseApplied = useRef(false)
 
   const tree = useMemo(
     () => buildMindmapTree(files, folderName || '스캔 결과'),
     [files, folderName]
   )
+
+  useEffect(() => {
+    if (initialCollapseApplied.current) return
+    const ids = new Set()
+    const walk = (node) => {
+      if (node.type === 'category' || node.type === 'tag') ids.add(node.id)
+      node.children?.forEach(walk)
+    }
+    walk(tree)
+    if (ids.size > 0) {
+      setCollapsed(ids)
+      initialCollapseApplied.current = true
+    }
+  }, [tree])
 
   const layout = useMemo(() => layoutTree(tree, collapsed), [tree, collapsed])
   const { nodes, edges } = useMemo(() => flattenLayout(layout), [layout])

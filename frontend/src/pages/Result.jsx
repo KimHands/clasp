@@ -1,8 +1,8 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   List, Network, Search, AlertTriangle,
-  ArrowLeft, FolderOpen, Settings
+  ArrowLeft, FolderOpen, Settings, X
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -14,6 +14,21 @@ import { getFiles } from '@/api/files'
 
 const TIER_LABELS = { 1: 'T1', 2: 'T2', 3: 'T3' }
 const TIER_COLORS = { 1: 'secondary', 2: 'default', 3: 'warning' }
+
+function HighlightText({ text, query }) {
+  if (!query || !text) return <>{text}</>
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const parts = text.split(new RegExp(`(${escaped})`, 'gi'))
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.toLowerCase() === query.toLowerCase()
+          ? <mark key={i} className="bg-yellow-200 text-yellow-900 rounded-sm px-0.5">{part}</mark>
+          : part
+      )}
+    </>
+  )
+}
 
 function ConfidenceDot({ score }) {
   const color = score < 0.31 ? 'bg-red-400' : score < 0.5 ? 'bg-yellow-400' : 'bg-green-400'
@@ -32,6 +47,8 @@ export default function Result() {
   const [viewMode, setViewMode] = useState('list')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
+  const debounceRef = useRef(null)
+  const inputRef = useRef(null)
 
   const fetchFiles = useCallback(async (overrides = {}) => {
     if (!scanId) return
@@ -40,7 +57,6 @@ export default function Result() {
       const params = { scanId, page, pageSize, ...filters, ...overrides }
       const data = await getFiles(params)
       setFiles(data.items, data.total)
-      // 미분류 파일 수 계산
       const unclassified = data.items.filter((f) => f.confidence_score < 0.31).length
       setUnclassifiedCount(unclassified)
     } catch (e) {
@@ -58,12 +74,30 @@ export default function Result() {
     fetchFiles()
   }, [scanId, page, fetchFiles, navigate])
 
-  const handleSearch = (e) => {
-    e.preventDefault()
-    setFilters({ search })
-    fetchFiles({ search, page: 1 })
-    setPage(1)
+  const handleSearchChange = (value) => {
+    setSearch(value)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      setFilters({ search: value })
+      fetchFiles({ search: value, page: 1 })
+      setPage(1)
+    }, 300)
   }
+
+  const clearSearch = () => {
+    setSearch('')
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    setFilters({ search: '' })
+    fetchFiles({ search: '', page: 1 })
+    setPage(1)
+    inputRef.current?.focus()
+  }
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [])
 
   const handleNodeClick = (fileId) => {
     if (!fileId) {
@@ -115,19 +149,27 @@ export default function Result() {
       {/* 툴바 */}
       <div className="bg-white border-b border-gray-100 px-6 py-2.5 flex items-center gap-3 shrink-0">
         {/* 검색 */}
-        <form onSubmit={handleSearch} className="flex items-center gap-2 flex-1 max-w-sm">
+        <div className="flex items-center gap-2 flex-1 max-w-md">
           <div className="relative flex-1">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
+              ref={inputRef}
               type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="파일명 검색"
-              className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="파일명, 경로, 카테고리, 태그 검색"
+              className="w-full pl-8 pr-8 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
             />
+            {search && (
+              <button
+                onClick={clearSearch}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500 transition-colors"
+              >
+                <X size={14} />
+              </button>
+            )}
           </div>
-          <Button type="submit" size="sm" variant="outline">검색</Button>
-        </form>
+        </div>
 
         <div className="flex items-center gap-1 ml-auto">
           {/* 뷰 전환 */}
@@ -186,14 +228,24 @@ export default function Result() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <ConfidenceDot score={file.confidence_score} />
-                          <span className="font-medium text-gray-800 truncate max-w-48">{file.filename}</span>
+                          <span className="font-medium text-gray-800 truncate max-w-48">
+                            <HighlightText text={file.filename} query={search} />
+                          </span>
                           {file.is_manual && (
                             <Badge variant="outline" className="text-xs py-0 px-1.5">수동</Badge>
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-gray-600">{file.category || <span className="text-gray-300">-</span>}</td>
-                      <td className="px-4 py-3 text-gray-500 text-xs">{file.tag || <span className="text-gray-300">-</span>}</td>
+                      <td className="px-4 py-3 text-gray-600">
+                        {file.category
+                          ? <HighlightText text={file.category} query={search} />
+                          : <span className="text-gray-300">-</span>}
+                      </td>
+                      <td className="px-4 py-3 text-gray-500 text-xs">
+                        {file.tag
+                          ? <HighlightText text={file.tag} query={search} />
+                          : <span className="text-gray-300">-</span>}
+                      </td>
                       <td className="px-4 py-3">
                         <Badge variant={TIER_COLORS[file.tier_used] || 'secondary'} className="text-xs">
                           {TIER_LABELS[file.tier_used] || '-'}

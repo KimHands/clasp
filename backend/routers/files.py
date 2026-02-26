@@ -49,49 +49,65 @@ async def list_files(
 ):
     """UC-03: 분류 결과 목록 조회 (페이지네이션 + 필터)"""
 
-    # 해당 scan_id의 모든 분류 결과 조회
-    all_cls = (
-        db.query(Classification)
+    from sqlalchemy import func
+
+    # 파일별 최우선 분류를 서브쿼리로 처리 (수동 > 최신 자동)
+    rank_subq = (
+        db.query(
+            Classification.id.label("cls_id"),
+            Classification.file_id,
+            func.row_number().over(
+                partition_by=Classification.file_id,
+                order_by=(Classification.is_manual.desc(), Classification.classified_at.desc()),
+            ).label("rn"),
+        )
         .filter(Classification.scan_id == scan_id)
+        .subquery()
+    )
+
+    best_cls_subq = (
+        db.query(rank_subq.c.cls_id)
+        .filter(rank_subq.c.rn == 1)
+        .subquery()
+    )
+
+    # JOIN 기반 단일 쿼리로 파일 + 분류 결과 조회
+    query = (
+        db.query(File, Classification)
+        .join(Classification, Classification.file_id == File.id)
+        .filter(Classification.id.in_(db.query(best_cls_subq.c.cls_id)))
+    )
+
+    # 파일명 + 경로 + 카테고리 + 태그 통합 검색
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            (File.filename.ilike(search_term))
+            | (File.path.ilike(search_term))
+            | (Classification.category.ilike(search_term))
+            | (Classification.tag.ilike(search_term))
+        )
+
+    if category:
+        query = query.filter(Classification.category == category)
+    if tag:
+        query = query.filter(Classification.tag == tag)
+    if min_confidence is not None:
+        query = query.filter(Classification.confidence_score >= min_confidence)
+    if unclassified:
+        query = query.filter(Classification.confidence_score < 0.31)
+
+    total = query.count()
+
+    result_pairs = (
+        query
         .order_by(Classification.is_manual.desc(), Classification.classified_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
         .all()
     )
 
-    # 파일별 최우선 분류 결과 선택 (수동 > 최신 자동)
-    best_cls: dict[int, Classification] = {}
-    for cls in all_cls:
-        if cls.file_id not in best_cls:
-            best_cls[cls.file_id] = cls
-        elif cls.is_manual and not best_cls[cls.file_id].is_manual:
-            best_cls[cls.file_id] = cls
-
-    # 파일 쿼리
-    file_ids = list(best_cls.keys())
-    file_query = db.query(File).filter(File.id.in_(file_ids))
-    if search:
-        file_query = file_query.filter(File.filename.ilike(f"%{search}%"))
-
-    files_map = {f.id: f for f in file_query.all()}
-
-    # 필터 적용 후 결과 조합
-    result_pairs = []
-    for file_id, cls in best_cls.items():
-        file = files_map.get(file_id)
-        if not file:
-            continue
-        if category and cls.category != category:
-            continue
-        if tag and cls.tag != tag:
-            continue
-        if min_confidence is not None and cls.confidence_score < min_confidence:
-            continue
-        if unclassified and cls.confidence_score >= 0.31:
-            continue
-        result_pairs.append((file, cls))
-
-    total = len(result_pairs)
-    paginated = result_pairs[(page - 1) * page_size: page * page_size]
-    items = [_build_file_item(file, cls) for file, cls in paginated]
+    items = [_build_file_item(file, cls) for file, cls in result_pairs]
 
     return JSONResponse(content=ok({
         "total": total,
