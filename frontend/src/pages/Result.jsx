@@ -98,8 +98,10 @@ export default function Result() {
           <span className="truncate">{selectedFolder}</span>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <Button variant="outline" size="sm" onClick={() => navigate('/rules')}>
+          <Button variant="ghost" size="sm" onClick={() => navigate('/settings')}>
             <Settings size={14} />
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => navigate('/rules')}>
             규칙 관리
           </Button>
           <Button size="sm" onClick={() => navigate('/apply')}>

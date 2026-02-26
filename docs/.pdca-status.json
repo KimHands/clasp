@@ -1,6 +1,6 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-02-26T01:12:44.226Z",
+  "lastUpdated": "2026-02-26T01:20:16.543Z",
   "activeFeatures": [
     "backend",
     "__init__.py",
@@ -13,7 +13,8 @@
     "cover_service.py",
     "scan_service.py",
     "classify_service.py",
-    "graph"
+    "graph",
+    "action_service.py"
   ],
   "primaryFeature": "backend",
   "features": {
@@ -26,9 +27,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-02-26T00:43:51.555Z",
-        "lastUpdated": "2026-02-26T01:09:42.046Z"
+        "lastUpdated": "2026-02-26T01:20:16.543Z"
       },
-      "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/backend/main.py"
+      "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/backend/run.py"
     },
     "__init__.py": {
       "phase": "do",
@@ -65,9 +66,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-02-26T00:46:45.802Z",
-        "lastUpdated": "2026-02-26T01:12:44.225Z"
+        "lastUpdated": "2026-02-26T01:19:36.661Z"
       },
-      "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/frontend/src/App.jsx"
+      "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/frontend/src/pages/Result.jsx"
     },
     "ui": {
       "phase": "do",
@@ -91,9 +92,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-02-26T00:47:35.098Z",
-        "lastUpdated": "2026-02-26T00:47:45.544Z"
+        "lastUpdated": "2026-02-26T01:17:46.348Z"
       },
-      "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/frontend/src/store/ruleStore.js"
+      "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/frontend/src/store/applyStore.js"
     },
     "api": {
       "phase": "do",
@@ -172,6 +173,19 @@
         "lastUpdated": "2026-02-26T01:10:48.146Z"
       },
       "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/frontend/src/graph/cytoscapeConfig.js"
+    },
+    "action_service.py": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-02-26T01:17:04.374Z",
+        "lastUpdated": "2026-02-26T01:17:04.374Z"
+      },
+      "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/backend/services/action_service.py"
     }
   },
   "pipeline": {
@@ -182,7 +196,7 @@
   "session": {
     "startedAt": "2026-02-26T00:43:51.555Z",
     "onboardingCompleted": false,
-    "lastActivity": "2026-02-26T01:12:44.226Z"
+    "lastActivity": "2026-02-26T01:20:16.543Z"
   },
   "history": [
     {
@@ -506,6 +520,60 @@
     {
       "timestamp": "2026-02-26T01:12:44.226Z",
       "feature": "frontend",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:17:04.374Z",
+      "feature": "action_service.py",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:17:11.935Z",
+      "feature": "backend",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:17:20.189Z",
+      "feature": "backend",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:17:25.013Z",
+      "feature": "backend",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:17:46.348Z",
+      "feature": "store",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:18:39.221Z",
+      "feature": "frontend",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:19:13.788Z",
+      "feature": "frontend",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:19:36.661Z",
+      "feature": "frontend",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:20:16.543Z",
+      "feature": "backend",
       "phase": "do",
       "action": "updated"
     }
