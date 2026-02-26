@@ -19,6 +19,11 @@ export function connectProgress(scanId, onMessage, onComplete, onError) {
   es.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data)
+      if (data.stage === -1) {
+        es.close()
+        onError?.(new Error(data.message || '스캔 중 오류 발생'))
+        return
+      }
       onMessage(data)
       if (data.stage === 7) {
         es.close()

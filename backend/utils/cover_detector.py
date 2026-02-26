@@ -31,14 +31,20 @@ def is_cover_page(text: str) -> bool:
 
 def extract_cover_text(file_path: str) -> Optional[str]:
     """
-    PDF 첫 페이지 텍스트 추출 후 표지 여부 판정
+    PDF/DOCX 첫 페이지(또는 첫 단락 블록) 텍스트 추출 후 표지 여부 판정
     표지로 판정되면 텍스트 반환, 아니면 None
     """
     import os
     ext = os.path.splitext(file_path)[1].lower()
-    if ext != ".pdf":
-        return None
 
+    if ext == ".pdf":
+        return _extract_pdf_cover(file_path)
+    elif ext == ".docx":
+        return _extract_docx_cover(file_path)
+    return None
+
+
+def _extract_pdf_cover(file_path: str) -> Optional[str]:
     doc = None
     try:
         import fitz
@@ -53,4 +59,24 @@ def extract_cover_text(file_path: str) -> Optional[str]:
     finally:
         if doc:
             doc.close()
+    return None
+
+
+def _extract_docx_cover(file_path: str) -> Optional[str]:
+    """DOCX 첫 페이지 구간(첫 10개 단락)에서 표지 판정"""
+    try:
+        from docx import Document
+    except ImportError:
+        return None
+
+    try:
+        doc = Document(file_path)
+        first_paragraphs = [p.text.strip() for p in doc.paragraphs[:10] if p.text.strip()]
+        if not first_paragraphs:
+            return None
+        candidate = "\n".join(first_paragraphs)
+        if is_cover_page(candidate):
+            return candidate
+    except Exception:
+        pass
     return None

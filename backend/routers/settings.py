@@ -1,3 +1,5 @@
+import os
+
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -12,6 +14,10 @@ from utils.errors import ErrorCode, raise_error
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 
+class ApiKeyRequest(BaseModel):
+    api_key: str
+
+
 class CreateExtensionRequest(BaseModel):
     extension: str
     category: str
@@ -19,6 +25,17 @@ class CreateExtensionRequest(BaseModel):
 
 # 기본 제공 확장자 카테고리 목록 (드롭다운 표시용)
 DEFAULT_CATEGORIES = sorted(set(_EXT_CATEGORY_MAP.values()))
+
+
+@router.post("/api-key")
+async def set_api_key(body: ApiKeyRequest):
+    """Electron 메인 프로세스에서 OpenAI API Key를 런타임에 설정"""
+    key = body.api_key.strip()
+    if key:
+        os.environ["OPENAI_API_KEY"] = key
+    else:
+        os.environ.pop("OPENAI_API_KEY", None)
+    return JSONResponse(content=ok({"configured": bool(key)}))
 
 
 @router.get("/extensions")

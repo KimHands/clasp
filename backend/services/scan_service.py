@@ -82,6 +82,7 @@ async def run_scan(
         yield {"stage": 2, "message": "메타데이터 분석 중", "total": total, "completed": 0, "current_file": ""}
 
         file_records: dict[str, File] = {}
+        pending_new: list[File] = []
         for i, fpath in enumerate(file_paths):
             filename = os.path.basename(fpath)
             extension = os.path.splitext(filename)[1].lower()
@@ -104,23 +105,25 @@ async def run_scan(
                     size=meta["size"],
                 )
                 db.add(file_record)
+                pending_new.append(file_record)
 
             if (i + 1) % BATCH_SIZE == 0 or i == total - 1:
                 db.commit()
-                for p in list(file_records.values())[-BATCH_SIZE:]:
-                    db.refresh(p)
-                db.refresh(file_record)
+                for rec in pending_new:
+                    db.refresh(rec)
+                pending_new.clear()
 
             file_records[fpath] = file_record
 
             yield {"stage": 2, "message": "메타데이터 분석 중", "total": total, "completed": i + 1, "current_file": filename}
             await asyncio.sleep(0)
 
-        # flush 후 전체 refresh (배치 commit으로 인해 id가 할당되지 않은 레코드 보정)
-        db.commit()
-        for fpath, rec in file_records.items():
-            if rec.id is None:
+        # 잔여 미 refresh 레코드 보정
+        if pending_new:
+            db.commit()
+            for rec in pending_new:
                 db.refresh(rec)
+            pending_new.clear()
 
         # Stage 3: 표지 탐지
         yield {"stage": 3, "message": "표지 탐지 중", "total": total, "completed": 0, "current_file": ""}

@@ -27,8 +27,6 @@ def update_manual_classification(
     )
 
     scan_id = latest_auto.scan_id if latest_auto else "manual"
-    tier_used = latest_auto.tier_used if latest_auto else 1
-    confidence_score = latest_auto.confidence_score if latest_auto else 1.0
 
     # 기존 수동 분류 업데이트
     existing_manual = (
@@ -52,8 +50,8 @@ def update_manual_classification(
                 scan_id=scan_id,
                 category=category,
                 tag=tag,
-                tier_used=tier_used,
-                confidence_score=confidence_score,
+                tier_used=0,
+                confidence_score=1.0,
                 is_manual=True,
             )
             db.add(cls)

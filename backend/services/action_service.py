@@ -152,22 +152,38 @@ def _resolve_conflict(dest_path: str, resolution: str) -> str:
 
 
 def _get_best_classifications(db: Session, scan_id: str) -> list[tuple]:
-    """파일별 최우선 분류 결과 반환 (수동 > 최신 자동)"""
-    all_cls = (
+    """
+    파일별 최우선 분류 결과 반환 (수동 > 최신 자동)
+    수동 분류(is_manual=True)는 scan_id와 무관하게 항상 우선 적용
+    """
+    # 해당 scan의 자동 분류 결과
+    auto_cls = (
         db.query(Classification)
-        .filter(Classification.scan_id == scan_id)
-        .order_by(Classification.is_manual.desc(), Classification.classified_at.desc())
+        .filter(Classification.scan_id == scan_id, Classification.is_manual == False)
+        .order_by(Classification.classified_at.desc())
         .all()
     )
+
+    # 자동 분류된 파일 ID 수집
+    file_ids = {cls.file_id for cls in auto_cls}
+    if not file_ids:
+        return []
+
     best_cls: dict[int, Classification] = {}
-    for cls in all_cls:
+    for cls in auto_cls:
         if cls.file_id not in best_cls:
             best_cls[cls.file_id] = cls
-        elif cls.is_manual and not best_cls[cls.file_id].is_manual:
-            best_cls[cls.file_id] = cls
 
-    if not best_cls:
-        return []
+    # 해당 파일들의 수동 분류 조회 (scan_id 무관)
+    manual_cls = (
+        db.query(Classification)
+        .filter(Classification.file_id.in_(file_ids), Classification.is_manual == True)
+        .order_by(Classification.classified_at.desc())
+        .all()
+    )
+    for cls in manual_cls:
+        if cls.file_id not in best_cls or not best_cls[cls.file_id].is_manual:
+            best_cls[cls.file_id] = cls
 
     files_map = {
         f.id: f for f in db.query(File).filter(File.id.in_(list(best_cls.keys()))).all()
@@ -263,63 +279,58 @@ def apply_organize(
     failed = 0
 
     for file, cls in rows:
-        # 미분류 파일 자동 제외
         if not cls or cls.confidence_score < UNCLASSIFIED_THRESHOLD:
             skipped += 1
             continue
 
-        # 이미 올바른 위치에 있는 파일 건너뜀
         dest_path = _get_destination(file, cls, base_dir, rules)
         if os.path.normpath(dest_path) == os.path.normpath(file.path):
             skipped += 1
             continue
 
-        # 충돌 해결
         final_dest = _resolve_conflict(dest_path, conflict_resolution)
         if final_dest is None:
             skipped += 1
-            log = ActionLog(
+            db.add(ActionLog(
                 action_log_id=action_log_id,
                 action_type="skip",
                 source_path=file.path,
                 destination_path=dest_path,
                 is_undone=False,
-            )
-            db.add(log)
+            ))
+            db.commit()
             continue
 
+        original_path = file.path
         try:
-            original_path = file.path
             os.makedirs(os.path.dirname(final_dest), exist_ok=True)
             shutil.move(original_path, final_dest)
-
-            # DB 파일 경로 업데이트 (이동 전 원본 경로 보존 후 업데이트)
-            file.path = final_dest
-            db.commit()
-
-            log = ActionLog(
+        except Exception as e:
+            failed += 1
+            import logging
+            logging.getLogger(__name__).warning(
+                "파일 이동 실패 %s → %s: %s", original_path, final_dest, e
+            )
+            db.add(ActionLog(
                 action_log_id=action_log_id,
-                action_type="move",
+                action_type="failed",
                 source_path=original_path,
                 destination_path=final_dest,
                 is_undone=False,
-            )
-            db.add(log)
-            moved += 1
-        except Exception as e:
-            db.rollback()
-            failed += 1
-            print(f"[apply] 파일 이동 실패 {file.path} → {final_dest}: {e}")
-            log = ActionLog(
-                action_log_id=action_log_id,
-                action_type="failed",
-                source_path=file.path,
-                destination_path=final_dest,
-                is_undone=False,
-            )
-            db.add(log)
+            ))
+            db.commit()
+            continue
 
-    db.commit()
+        file.path = final_dest
+        db.add(ActionLog(
+            action_log_id=action_log_id,
+            action_type="move",
+            source_path=original_path,
+            destination_path=final_dest,
+            is_undone=False,
+        ))
+        db.commit()
+        moved += 1
 
     return {
         "moved": moved,

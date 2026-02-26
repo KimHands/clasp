@@ -39,22 +39,23 @@ async def classify(
     # Tier 2: 임베딩 유사도 (텍스트 있을 때만)
     if extracted_text:
         t2 = tier2_embedding.run(extracted_text)
-        # Tier 2가 Tier 1보다 높은 신뢰도면 채택
-        if t2["confidence_score"] >= t1["confidence_score"]:
-            if t2["confidence_score"] >= TIER2_CONFIDENCE_THRESHOLD:
-                return {
-                    "category": t2["category"],
-                    "tag": t2["tag"],
-                    "tier_used": 2,
-                    "confidence_score": t2["confidence_score"],
-                }
 
-            # Tier 3: 클라우드 LLM (API Key 있을 때만)
-            if tier3_llm.is_available():
-                t3 = await tier3_llm.run(extracted_text, filename)
-                if t3["confidence_score"] > t2["confidence_score"]:
-                    return {**t3, "tier_used": 3}
+        if t2["confidence_score"] >= TIER2_CONFIDENCE_THRESHOLD:
+            return {
+                "category": t2["category"],
+                "tag": t2["tag"],
+                "tier_used": 2,
+                "confidence_score": t2["confidence_score"],
+            }
 
+        # Tier 3: 클라우드 LLM (Tier 2 threshold 미달 + API Key 있을 때)
+        if tier3_llm.is_available():
+            t3 = await tier3_llm.run(extracted_text, filename)
+            if t3["confidence_score"] > max(t1["confidence_score"], t2["confidence_score"]):
+                return {**t3, "tier_used": 3}
+
+        # Tier 1과 Tier 2 중 신뢰도가 높은 결과 채택
+        if t2["confidence_score"] > t1["confidence_score"]:
             return {
                 "category": t2["category"],
                 "tag": t2["tag"],
