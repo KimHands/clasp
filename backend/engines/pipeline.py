@@ -31,6 +31,7 @@ async def classify(
         extension=extension,
         db=db,
         manual_category=manual_category,
+        extracted_text=extracted_text,
     )
 
     if t1["confidence_score"] >= TIER1_CONFIDENCE_THRESHOLD:

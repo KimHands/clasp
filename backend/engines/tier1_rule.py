@@ -70,6 +70,7 @@ def run(
     extension: str,
     db: Session,
     manual_category: Optional[str] = None,
+    extracted_text: Optional[str] = None,
 ) -> dict:
     """
     Tier 1 규칙 기반 분류
@@ -90,7 +91,7 @@ def run(
     # 사용자 정의 규칙 적용 (우선순위 오름차순)
     rules: list[Rule] = db.query(Rule).order_by(Rule.priority).all()
     for rule in rules:
-        matched = _match_rule(rule, file_path, filename, extension)
+        matched = _match_rule(rule, file_path, filename, extension, extracted_text)
         if matched:
             return {
                 "category": rule.folder_name,
@@ -124,7 +125,13 @@ def run(
     }
 
 
-def _match_rule(rule: Rule, file_path: str, filename: str, extension: str) -> bool:
+def _match_rule(
+    rule: Rule,
+    file_path: str,
+    filename: str,
+    extension: str,
+    extracted_text: Optional[str] = None,
+) -> bool:
     """규칙 유형별 매칭"""
     rule_type = rule.type
     value = rule.value.lower()
@@ -137,7 +144,8 @@ def _match_rule(rule: Rule, file_path: str, filename: str, extension: str) -> bo
         return bool(year_match and year_match.group() == value)
 
     if rule_type == "content":
-        # 파일명에 키워드 포함 여부 (내용 기반은 Tier 2에서 처리)
+        if extracted_text and value in extracted_text.lower():
+            return True
         return value in filename.lower()
 
     return False

@@ -74,6 +74,17 @@ async def start_scan(body: ScanStartRequest):
 
     _cleanup_stale_scans()
 
+    # 동일 폴더에 대해 진행 중인 스캔이 있으면 해당 scan_id 반환 (중복 방지)
+    for sid, info in _active_scans.items():
+        if info["folder_path"] == folder_path and info["status"] == "started":
+            return JSONResponse(
+                content=ok({
+                    "scan_id": sid,
+                    "status": "already_running",
+                    "folder_path": folder_path,
+                })
+            )
+
     scan_id = f"scan_{uuid.uuid4().hex[:12]}"
     _active_scans[scan_id] = {
         "folder_path": folder_path,

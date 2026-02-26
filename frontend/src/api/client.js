@@ -28,13 +28,16 @@ async function request(method, path, body = null) {
     throw err
   }
 
-  if (!json.success) {
-    const err = new Error(json.error?.message || '요청 실패')
-    err.code = json.error?.code
+  // FastAPI HTTPException은 { detail: { success, error, ... } } 형태로 응답
+  const payload = json.detail ?? json
+
+  if (!payload.success) {
+    const err = new Error(payload.error?.message || '요청 실패')
+    err.code = payload.error?.code
     throw err
   }
 
-  return json.data
+  return payload.data
 }
 
 export const api = {

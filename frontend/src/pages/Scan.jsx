@@ -33,13 +33,16 @@ export default function Scan() {
 
   const { reset: resetFiles } = useFileStore()
 
-  // 페이지 진입 시 자동 스캔 시작
+  const startedRef = useRef(false)
+
+  // 페이지 진입 시 자동 스캔 시작 (StrictMode 중복 실행 방지)
   useEffect(() => {
     if (!selectedFolder) {
       navigate('/')
       return
     }
-    if (scanStatus === 'idle') {
+    if (scanStatus === 'idle' && !startedRef.current) {
+      startedRef.current = true
       handleStartScan()
     }
     return () => {

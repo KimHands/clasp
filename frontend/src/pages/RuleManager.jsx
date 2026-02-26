@@ -159,7 +159,7 @@ function RuleTreeLevel({ nodes, parentId, onDelete, depth = 0 }) {
   )
 }
 
-function AddRuleForm({ onAdd, rules }) {
+function AddRuleForm({ onAdd, rules, externalError }) {
   const [type, setType] = useState('extension')
   const [value, setValue] = useState('')
   const [folderName, setFolderName] = useState('')
@@ -211,17 +211,21 @@ function AddRuleForm({ onAdd, rules }) {
       return
     }
     setError('')
-    await onAdd({
+    const result = await onAdd({
       type,
       value: value.trim(),
       folderName: folderName.trim(),
       parentId: parentId ? Number(parentId) : null,
     })
-    setValue('')
-    setFolderName('')
-    setParentId('')
-    setUseCustomInput(false)
+    if (result?.success) {
+      setValue('')
+      setFolderName('')
+      setParentId('')
+      setUseCustomInput(false)
+    }
   }
+
+  const displayError = error || externalError
 
   return (
     <form onSubmit={handleSubmit} className="glass-card p-4 border-[hsl(var(--primary)/0.2)] bg-[hsl(var(--primary)/0.04)]">
@@ -299,7 +303,7 @@ function AddRuleForm({ onAdd, rules }) {
           <Plus size={14} /> 추가
         </Button>
       </div>
-      {error && <p className="text-xs text-[hsl(var(--destructive))] mt-2">{error}</p>}
+      {displayError && <p className="text-xs text-[hsl(var(--destructive))] mt-2">{displayError}</p>}
     </form>
   )
 }
@@ -374,15 +378,23 @@ export default function RuleManager() {
     }
   }
 
+  const [formError, setFormError] = useState('')
+
   const handleAdd = async ({ type, value, folderName, parentId }) => {
     const nextPriority = rules.length > 0 ? Math.max(...rules.map((r) => r.priority)) + 1 : 1
+    setFormError('')
     try {
       const newRule = await createRule({
         priority: nextPriority, type, value, folderName, parentId,
       })
       addRule(newRule)
+      return { success: true }
     } catch (e) {
-      alert(e.message || '규칙 추가에 실패했습니다')
+      const msg = e.code === 'RULE_CONFLICT'
+        ? `이미 동일한 규칙이 존재합니다 (${TYPE_LABELS[type] || type}: ${value})`
+        : (e.message || '규칙 추가에 실패했습니다')
+      setFormError(msg)
+      return { success: false }
     }
   }
 
@@ -471,7 +483,7 @@ export default function RuleManager() {
       </header>
 
       <div className="max-w-4xl mx-auto px-6 py-6 space-y-5">
-        <AddRuleForm onAdd={handleAdd} rules={sortedRules} />
+        <AddRuleForm onAdd={handleAdd} rules={sortedRules} externalError={formError} />
 
         <FolderPreview tree={tree} />
 

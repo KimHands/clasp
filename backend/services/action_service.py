@@ -39,8 +39,15 @@ def _match_rule(rule: Rule, file: File, cls: Classification | None) -> bool:
         return str(file.modified_at.year) == rule.value
     if rule.type == "extension" and file.extension:
         return file.extension.lstrip(".").lower() == rule.value.lower()
-    if rule.type == "content" and cls and cls.category:
-        return rule.value.lower() in cls.category.lower()
+    if rule.type == "content":
+        keyword = rule.value.lower()
+        if file.extracted_text_summary and keyword in file.extracted_text_summary.lower():
+            return True
+        if keyword in file.filename.lower():
+            return True
+        if cls and cls.category and keyword in cls.category.lower():
+            return True
+        return False
     return False
 
 

@@ -68,13 +68,18 @@ async def create_rule(body: CreateRuleRequest, db: Session = Depends(get_db)):
     if body.type not in VALID_TYPES:
         raise_error(ErrorCode.INVALID_TYPE, f"지원하지 않는 규칙 type: {body.type}")
 
+    # 같은 부모 아래에서만 type + value 중복 체크
     existing = (
         db.query(Rule)
-        .filter(Rule.type == body.type, Rule.value == body.value)
+        .filter(
+            Rule.type == body.type,
+            Rule.value == body.value,
+            Rule.parent_id == body.parent_id,
+        )
         .first()
     )
     if existing:
-        raise_error(ErrorCode.RULE_CONFLICT, "동일한 type + value 규칙이 이미 존재합니다")
+        raise_error(ErrorCode.RULE_CONFLICT, "같은 위치에 동일한 규칙이 이미 존재합니다")
 
     if body.parent_id is not None:
         parent = db.query(Rule).filter(Rule.id == body.parent_id).first()
