@@ -16,6 +16,7 @@ export default function Home() {
 
   const handleStartScan = () => {
     if (!selectedFolder) return
+    useScanStore.getState().resetScan()
     navigate('/scan')
   }
 
