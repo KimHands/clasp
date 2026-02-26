@@ -153,7 +153,7 @@ async def run_scan(
                 text = await asyncio.to_thread(extract_text, fpath)
                 if text:
                     file_record = file_records[fpath]
-                    file_record.extracted_text_summary = text[:500]
+                    file_record.extracted_text_summary = text[:2000]
 
             extracted_texts[fpath] = text
 

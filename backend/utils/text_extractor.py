@@ -46,6 +46,15 @@ def _extract_pdf(file_path: str) -> Optional[str]:
         if not effective_pages:
             return None
 
+        # 유효 페이지가 4 미만이면 샘플링 없이 전체 추출 (중복 샘플링 방지)
+        if len(effective_pages) < 4:
+            chunks = []
+            for page_idx in effective_pages:
+                text = doc[page_idx].get_text("text")
+                if text:
+                    chunks.append(text[:1200])
+            return "\n".join(chunks) if chunks else None
+
         # 4구간 샘플링 위치 (30%, 45%, 65%, 85%)
         sample_ratios = [0.30, 0.45, 0.65, 0.85]
         n = len(effective_pages)

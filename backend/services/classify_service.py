@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from models.schema import Classification, File
 from utils.errors import ErrorCode, raise_error
+from engines import tier2_embedding
 
 
 def update_manual_classification(
@@ -13,6 +14,7 @@ def update_manual_classification(
     UC-04: 수동 분류 수정
     - is_manual=True 로 저장 → 다음 스캔 시 Tier 1에서 우선 참조
     - 기존 수동 분류가 있으면 업데이트, 없으면 신규 생성
+    - 수동 분류 저장 후 Tier 2 임베딩 피드백 반영 (파일 텍스트 추출 요약 사용)
     """
     file = db.query(File).filter(File.id == file_id).first()
     if not file:
@@ -60,6 +62,10 @@ def update_manual_classification(
     except Exception:
         db.rollback()
         raise_error(ErrorCode.SAVE_FAILED)
+
+    # Tier 2 임베딩 피드백 반영 — 저장된 텍스트 요약과 수동 카테고리로 즉시 보정
+    if category and file.extracted_text_summary:
+        tier2_embedding.apply_feedback(file.extracted_text_summary, category)
 
     return {
         "id": file_id,

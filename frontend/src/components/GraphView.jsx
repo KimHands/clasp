@@ -397,6 +397,15 @@ export default function GraphView({ files, folderName, onNodeClick }) {
     setZoom((z) => Math.max(0.2, Math.min(z * delta, 3)))
   }, [])
 
+  // React의 onWheel은 passive listener로 등록되어 preventDefault()가 불가하므로
+  // DOM에 직접 { passive: false }로 등록해야 확대/축소 시 페이지 스크롤을 막을 수 있음
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    el.addEventListener('wheel', handleWheel, { passive: false })
+    return () => el.removeEventListener('wheel', handleWheel)
+  }, [handleWheel])
+
   const handlePointerDown = useCallback((e) => {
     if (e.target.closest('[data-interactive]')) return
     setDragging(true)
@@ -421,7 +430,6 @@ export default function GraphView({ files, folderName, onNodeClick }) {
       ref={containerRef}
       className="relative w-full h-full rounded-xl glass overflow-hidden select-none"
       style={{ minHeight: 480 }}
-      onWheel={handleWheel}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

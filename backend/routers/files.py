@@ -32,6 +32,7 @@ def _build_file_item(file: File, cls: Classification | None) -> dict:
         "tier_used": cls.tier_used if cls else None,
         "confidence_score": cls.confidence_score if cls else 0.0,
         "is_manual": cls.is_manual if cls else False,
+        "extracted_text_summary": file.extracted_text_summary or None,
     }
 
 

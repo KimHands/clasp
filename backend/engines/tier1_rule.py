@@ -63,6 +63,17 @@ _EXT_CATEGORY_MAP = {
 # 파일명에서 연도 추출 패턴
 _YEAR_PATTERN = re.compile(r"(20\d{2}|19\d{2})")
 
+# 파일명 키워드 → 카테고리 패턴 (확장자 매핑보다 우선 적용, confidence 0.82 반환)
+_FILENAME_PATTERNS = [
+    (re.compile(r"(과제|레포트|report|assignment)", re.I), "문서"),
+    (re.compile(r"(발표|presentation|슬라이드)", re.I), "프레젠테이션"),
+    (re.compile(r"(회의록|minutes|meeting)", re.I), "문서"),
+    (re.compile(r"(기획서|proposal|계획서|사업계획)", re.I), "문서"),
+    (re.compile(r"(계약서|contract|협약)", re.I), "문서"),
+    (re.compile(r"(논문|thesis|dissertation|paper)", re.I), "문서"),
+    (re.compile(r"(매뉴얼|manual|지침서|가이드|guide)", re.I), "문서"),
+]
+
 
 def run(
     file_path: str,
@@ -97,6 +108,18 @@ def run(
                 "category": rule.folder_name,
                 "tag": None,
                 "confidence_score": 0.85,
+            }
+
+    # 파일명 키워드 패턴 매칭 (확장자 매핑보다 우선)
+    filename_no_ext = os.path.splitext(filename)[0]
+    for pattern, matched_category in _FILENAME_PATTERNS:
+        if pattern.search(filename_no_ext):
+            year_match = _YEAR_PATTERN.search(filename)
+            tag = f"{matched_category}_{year_match.group()}" if year_match else None
+            return {
+                "category": matched_category,
+                "tag": tag,
+                "confidence_score": 0.82,
             }
 
     # 확장자 매핑 (기본 + 사용자 커스텀)

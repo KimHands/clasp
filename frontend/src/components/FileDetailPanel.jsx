@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { X, Save, FileText, Tag, BarChart2, Layers } from 'lucide-react'
+import { X, FileText, Tag, Layers, AlignLeft, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { updateFile } from '@/api/files'
@@ -27,11 +27,13 @@ export default function FileDetailPanel({ file, onClose }) {
   const [tag, setTag] = useState(file?.tag || '')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [summaryExpanded, setSummaryExpanded] = useState(false)
 
   useEffect(() => {
     setCategory(file?.category || '')
     setTag(file?.tag || '')
     setSaved(false)
+    setSummaryExpanded(false)
   }, [file?.id])
 
   if (!file) return null
@@ -95,6 +97,27 @@ export default function FileDetailPanel({ file, onClose }) {
             </div>
           </div>
         </section>
+
+        {/* 파일 내용 요약 */}
+        {file.extracted_text_summary && (
+          <section>
+            <button
+              onClick={() => setSummaryExpanded((v) => !v)}
+              className="w-full flex items-center justify-between text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wide mb-2 hover:text-[hsl(var(--foreground))] transition-colors"
+            >
+              <span className="flex items-center gap-1.5">
+                <AlignLeft size={12} />
+                내용 요약
+              </span>
+              {summaryExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+            </button>
+            {summaryExpanded && (
+              <div className="glass rounded-xl px-3 py-2.5 text-xs text-[hsl(var(--foreground)/0.7)] leading-relaxed whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+                {file.extracted_text_summary}
+              </div>
+            )}
+          </section>
+        )}
 
         {/* 수동 편집 */}
         <section>
