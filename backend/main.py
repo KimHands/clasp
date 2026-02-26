@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from pydantic import BaseModel
 
 from database import init_db
-from routers import scan, files, rules, apply
+from routers import scan, files, rules, apply, settings
 from utils.response import ok
 
 
@@ -38,6 +38,7 @@ app.include_router(scan.router)
 app.include_router(files.router)
 app.include_router(rules.router)
 app.include_router(apply.router)
+app.include_router(settings.router)
 
 
 class ApiKeyRequest(BaseModel):

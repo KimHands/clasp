@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Eye, EyeOff, Plus, X, Save, Key, ShieldAlert } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff, Plus, X, Save, Key, ShieldAlert, FileType2, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import useExtensionStore from '@/store/extensionStore'
 
-// API Key는 보안상 localStorage 대신 Electron 메인 프로세스(암호화된 파일)에 저장
-// 키워드는 민감 정보가 아니므로 localStorage 유지
 const STORAGE_KEY_KEYWORDS = 'clasp_sensitive_keywords'
 
 export default function Settings() {
@@ -17,19 +16,24 @@ export default function Settings() {
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState('')
 
+  const [newExt, setNewExt] = useState('')
+  const [newExtCategory, setNewExtCategory] = useState('')
+  const [extError, setExtError] = useState('')
+
+  const { extensions, categories, fetchExtensions, addExtension, removeExtension } = useExtensionStore()
+
   useEffect(() => {
-    // Electron 메인 프로세스에서 저장된 API Key 로드
     window.electronAPI?.getEnv?.('OPENAI_API_KEY').then((key) => {
       if (key) setApiKey(key)
     })
     const storedKeywords = JSON.parse(localStorage.getItem(STORAGE_KEY_KEYWORDS) || '[]')
     setKeywords(storedKeywords)
+    fetchExtensions()
   }, [])
 
   const handleSave = async () => {
     setSaveError('')
     try {
-      // Electron IPC → 메인 프로세스가 설정 파일 저장 + 백엔드 HTTP 전달
       const result = await window.electronAPI?.setEnv?.('OPENAI_API_KEY', apiKey)
       if (result && !result.success) {
         setSaveError('API Key 저장에 실패했습니다.')
@@ -141,6 +145,114 @@ export default function Settings() {
           ) : (
             <p className="text-xs text-gray-400">등록된 키워드가 없습니다.</p>
           )}
+        </section>
+
+        {/* 확장자 관리 */}
+        <section className="bg-white border border-gray-200 rounded-2xl p-6">
+          <div className="flex items-center gap-2 mb-1">
+            <FileType2 size={16} className="text-gray-400" />
+            <h2 className="text-sm font-bold text-gray-800">확장자 관리</h2>
+          </div>
+          <p className="text-xs text-gray-500 mb-4">
+            기본 확장자 외에 추가 확장자를 등록하면 규칙 추가 시 드롭다운에 표시됩니다.
+            분류 엔진(Tier 1)에서도 자동으로 인식합니다.
+          </p>
+
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault()
+              setExtError('')
+              const ext = newExt.trim().replace(/^\./, '').toLowerCase()
+              const cat = newExtCategory.trim()
+              if (!ext || !cat) {
+                setExtError('확장자와 카테고리를 모두 입력해주세요')
+                return
+              }
+              try {
+                await addExtension({ extension: ext, category: cat })
+                setNewExt('')
+                setNewExtCategory('')
+              } catch (err) {
+                setExtError(err.message || '확장자 추가 실패')
+              }
+            }}
+            className="flex gap-2 mb-4 flex-wrap"
+          >
+            <input
+              type="text"
+              value={newExt}
+              onChange={(e) => setNewExt(e.target.value)}
+              placeholder="확장자 (예: hwp)"
+              className="w-28 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+            <div className="flex-1 min-w-32 relative">
+              <input
+                type="text"
+                list="category-suggestions"
+                value={newExtCategory}
+                onChange={(e) => setNewExtCategory(e.target.value)}
+                placeholder="카테고리 (예: 문서)"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+              />
+              <datalist id="category-suggestions">
+                {categories.map((cat) => (
+                  <option key={cat} value={cat} />
+                ))}
+              </datalist>
+            </div>
+            <Button type="submit" size="sm" variant="outline">
+              <Plus size={14} /> 추가
+            </Button>
+          </form>
+          {extError && <p className="text-xs text-red-500 mb-3">{extError}</p>}
+
+          {/* 기본 확장자 목록 (읽기 전용) */}
+          <div className="mb-4">
+            <p className="text-xs font-semibold text-gray-500 mb-2">기본 확장자</p>
+            <div className="flex flex-wrap gap-1.5">
+              {extensions.filter((e) => e.is_default).map((ext) => (
+                <span
+                  key={ext.extension}
+                  className="inline-flex items-center gap-1 bg-gray-100 text-gray-600 text-xs px-2.5 py-1 rounded-full"
+                >
+                  .{ext.extension}
+                  <span className="text-gray-400">({ext.category})</span>
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* 사용자 추가 확장자 (삭제 가능) */}
+          <div>
+            <p className="text-xs font-semibold text-gray-500 mb-2">사용자 추가 확장자</p>
+            {extensions.filter((e) => !e.is_default).length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {extensions.filter((e) => !e.is_default).map((ext) => (
+                  <span
+                    key={ext.id}
+                    className="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 text-sm px-3 py-1 rounded-full"
+                  >
+                    .{ext.extension}
+                    <span className="text-blue-400 text-xs">({ext.category})</span>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await removeExtension(ext.id)
+                        } catch (err) {
+                          alert(err.message || '삭제 실패')
+                        }
+                      }}
+                      className="text-blue-300 hover:text-red-400 transition-colors"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400">등록된 사용자 확장자가 없습니다.</p>
+            )}
+          </div>
         </section>
 
         {/* 저장 버튼 */}

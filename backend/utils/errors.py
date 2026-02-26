@@ -14,6 +14,8 @@ class ErrorCode:
     MOVE_FAILED = "MOVE_FAILED"
     LOG_NOT_FOUND = "LOG_NOT_FOUND"
     ALREADY_UNDONE = "ALREADY_UNDONE"
+    EXTENSION_CONFLICT = "EXTENSION_CONFLICT"
+    EXTENSION_NOT_FOUND = "EXTENSION_NOT_FOUND"
 
 
 ERROR_HTTP_STATUS = {
@@ -29,6 +31,8 @@ ERROR_HTTP_STATUS = {
     ErrorCode.MOVE_FAILED: 500,
     ErrorCode.LOG_NOT_FOUND: 404,
     ErrorCode.ALREADY_UNDONE: 409,
+    ErrorCode.EXTENSION_CONFLICT: 409,
+    ErrorCode.EXTENSION_NOT_FOUND: 404,
 }
 
 ERROR_MESSAGES = {
@@ -44,6 +48,8 @@ ERROR_MESSAGES = {
     ErrorCode.MOVE_FAILED: "파일 이동 실패",
     ErrorCode.LOG_NOT_FOUND: "해당 로그 ID 없음",
     ErrorCode.ALREADY_UNDONE: "이미 되돌리기 완료된 작업",
+    ErrorCode.EXTENSION_CONFLICT: "동일한 확장자가 이미 등록됨",
+    ErrorCode.EXTENSION_NOT_FOUND: "해당 확장자 ID 없음",
 }
 
 

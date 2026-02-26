@@ -33,6 +33,36 @@ def _find_common_base(file_paths: list[str]) -> str:
         return os.path.dirname(file_paths[0])
 
 
+def _match_rule(rule: Rule, file: File, cls: Classification | None) -> bool:
+    """규칙이 파일에 매칭되는지 판별"""
+    if rule.type == "date" and file.modified_at:
+        return str(file.modified_at.year) == rule.value
+    if rule.type == "extension" and file.extension:
+        return file.extension.lstrip(".").lower() == rule.value.lower()
+    if rule.type == "content" and cls and cls.category:
+        return rule.value.lower() in cls.category.lower()
+    return False
+
+
+def _build_ancestor_path(rule: Rule, rule_map: dict[int, Rule]) -> list[str]:
+    """
+    규칙의 조상 체인을 따라 폴더 경로 구성 (루트 → 현재 규칙 순서)
+    예: 규칙 C(parent=B), B(parent=A), A(parent=None)
+    → [A.folder_name, B.folder_name, C.folder_name]
+    """
+    chain = []
+    current = rule
+    visited = set()
+    while current:
+        if current.id in visited:
+            break
+        visited.add(current.id)
+        chain.append(_sanitize_path_component(current.folder_name))
+        current = rule_map.get(current.parent_id) if current.parent_id else None
+    chain.reverse()
+    return chain
+
+
 def _get_destination(
     file: File,
     cls: Classification | None,
@@ -40,29 +70,46 @@ def _get_destination(
     rules: list[Rule],
 ) -> str:
     """
-    규칙 우선순위 순서로 폴더 경로 생성
-    예: 2025 / 보안 / PDF / filename.pdf
+    트리 기반 규칙 우선순위로 폴더 경로 생성
+
+    규칙 간 parent_id 관계로 중첩/플랫을 결정:
+      - parent_id가 None인 규칙끼리는 동일 레벨 (flat)
+      - parent_id가 있는 규칙은 부모 폴더 하위에 중첩 (nested)
+
+    예: 규칙 [2025(루트), 보안(parent=2025), PDF(루트)]
+      → 2025년 보안 파일: base/2025/보안/file.pdf
+      → 2025년 PDF 파일: base/2025/file.pdf (PDF는 루트이므로 별도 경로)
     """
-    parts = []
+    rule_map = {r.id: r for r in rules}
+    sorted_rules = sorted(rules, key=lambda r: r.priority)
 
-    if rules:
-        for rule in sorted(rules, key=lambda r: r.priority):
-            if rule.type == "date" and file.modified_at:
-                year = str(file.modified_at.year)
-                if year == rule.value:
-                    parts.append(_sanitize_path_component(rule.folder_name))
-            elif rule.type == "extension" and file.extension:
-                if file.extension.lstrip(".").lower() == rule.value.lower():
-                    parts.append(_sanitize_path_component(rule.folder_name))
-            elif rule.type == "content" and cls and cls.category:
-                if rule.value.lower() in cls.category.lower():
-                    parts.append(_sanitize_path_component(rule.folder_name))
+    best_match: Rule | None = None
+    for rule in sorted_rules:
+        if _match_rule(rule, file, cls):
+            # 가장 깊은(구체적인) 매칭 규칙을 찾기 위해 자식 우선 탐색
+            # 부모도 매칭되고 자식도 매칭되면 자식이 더 구체적
+            if best_match is None:
+                best_match = rule
+            elif rule.parent_id is not None:
+                # 현재 best_match의 후손인지 확인
+                ancestor = rule
+                is_descendant = False
+                visited = set()
+                while ancestor and ancestor.id not in visited:
+                    visited.add(ancestor.id)
+                    if ancestor.parent_id == best_match.id:
+                        is_descendant = True
+                        break
+                    ancestor = rule_map.get(ancestor.parent_id) if ancestor.parent_id else None
+                if is_descendant:
+                    best_match = rule
 
-    # 규칙 매칭이 없으면 카테고리 폴더 사용
-    if not parts and cls and cls.category:
-        parts.append(_sanitize_path_component(cls.category))
-    elif not parts:
-        parts.append("기타")
+    if best_match:
+        parts = _build_ancestor_path(best_match, rule_map)
+    elif cls and cls.category:
+        parts = [_sanitize_path_component(cls.category)]
+    else:
+        parts = ["기타"]
 
     folder = os.path.join(base_dir, *parts)
     dest = os.path.join(folder, file.filename)

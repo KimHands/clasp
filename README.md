@@ -1,6 +1,6 @@
 # Clasp — 파일 정리 및 시각화 도구
 
-로컬 파일을 자동으로 분류하고, 분류 결과를 그래프로 시각화하는 데스크톱 애플리케이션입니다.  
+로컬 파일을 자동으로 분류하고, 분류 결과를 마인드맵으로 시각화하는 데스크톱 애플리케이션입니다.  
 파일 원문을 외부 서버로 전송하지 않는 **프라이버시 우선** 설계를 기반으로 합니다.
 
 ---
@@ -8,9 +8,11 @@
 ## 주요 기능
 
 - **자동 분류**: 확장자·날짜·파일 내용 기반 3단계 Tier 분류 엔진
-- **그래프 시각화**: Cytoscape.js 기반 태그 클러스터 / 트리 / 포스 다이렉티드 레이아웃
+- **마인드맵 시각화**: React SVG 기반 마인드맵 — 카드형 노드, S자 곡선 연결, 접기/펼치기
 - **표지 유사도 탐지**: PDF·DOCX 표지 임베딩으로 같은 과목 파일 자동 그룹화
 - **규칙 관리**: 날짜·내용·확장자 기반 정리 규칙을 드래그 앤 드롭으로 우선순위 설정
+- **확장자 드롭다운**: 규칙 추가 시 카테고리별 주요 확장자 드롭다운 제공 (55개 기본 내장)
+- **커스텀 확장자 관리**: 설정에서 확장자 추가/삭제 — 분류 엔진에 자동 반영
 - **정리 적용 & Undo**: 파일 이동 실행 후 원클릭 되돌리기 지원
 - **실시간 진행 표시**: SSE 스트림으로 스캔 단계별 진행 상황 실시간 표시
 
@@ -35,7 +37,7 @@
 | React 19 + Vite | UI 프레임워크 |
 | Zustand | 전역 상태 관리 |
 | shadcn/ui + Tailwind CSS | UI 컴포넌트 |
-| Cytoscape.js + fcose | 그래프 시각화 |
+| React SVG 마인드맵 | 분류 결과 트리 시각화 (커스텀 구현) |
 | SSE | 실시간 스캔 진행 수신 |
 
 ### Backend
@@ -57,7 +59,8 @@
 
 ```
 Tier 1 — 규칙 기반 (항상 동작)
-  ├── 확장자 매핑 딕셔너리
+  ├── 사용자 정의 규칙 (우선순위 적용)
+  ├── 확장자 매핑 (기본 55개 + 사용자 커스텀)
   └── 파일명 날짜 정규식
       → 신뢰도 높음: Tier 2 스킵
       → 신뢰도 낮음: Tier 2 호출
@@ -74,6 +77,20 @@ Tier 3 — 클라우드 LLM (선택적)
 미분류: confidence_score < 0.31 → 격리, 파일 이동 제외
 ```
 
+### 기본 확장자 매핑 (55개)
+
+| 카테고리 | 확장자 |
+|---|---|
+| 문서 | pdf, docx, doc, txt, md, hwp, rtf |
+| 프레젠테이션 | pptx, ppt, key |
+| 스프레드시트 | xlsx, xls, csv |
+| 데이터 | json, xml, yaml, sql |
+| 코드 | py, js, ts, jsx, tsx, java, cpp, c, h, go, rs, html, css |
+| 이미지 | jpg, jpeg, png, gif, svg, webp, bmp |
+| 영상 | mp4, mov, avi, mkv, webm |
+| 오디오 | mp3, wav, flac, aac, ogg |
+| 압축 | zip, tar, gz, rar, 7z |
+
 ---
 
 ## 프로젝트 구조
@@ -82,20 +99,20 @@ Tier 3 — 클라우드 LLM (선택적)
 Clasp/
 ├── frontend/
 │   ├── src/
-│   │   ├── components/       # 공유 UI 컴포넌트 (GraphView, FileDetailPanel 등)
+│   │   ├── components/       # GraphView(마인드맵), FileDetailPanel 등
 │   │   ├── pages/            # Home, Scan, Result, RuleManager, Apply, Settings
-│   │   ├── store/            # Zustand 스토어 (scan, file, rule, apply)
-│   │   ├── api/              # FastAPI 호출 함수 (중앙화)
-│   │   └── graph/            # Cytoscape.js 설정
+│   │   ├── store/            # Zustand 스토어 (scan, file, rule, apply, extension)
+│   │   ├── api/              # FastAPI 호출 함수 (rules, files, scan, apply, settings)
+│   │   └── graph/            # 마인드맵 데이터 변환 유틸리티
 │   └── electron/
 │       ├── main.js           # Electron 메인 프로세스
 │       └── preload.js
 │
 ├── backend/
-│   ├── routers/              # scan.py, files.py, rules.py, apply.py
+│   ├── routers/              # scan.py, files.py, rules.py, apply.py, settings.py
 │   ├── services/             # scan_service, classify_service, cover_service, action_service
 │   ├── engines/              # tier1_rule, tier2_embedding, tier3_llm, pipeline
-│   ├── models/               # schema.py (SQLAlchemy 모델)
+│   ├── models/               # schema.py (SQLAlchemy 모델 — File, Classification, Rule, CustomExtension 등)
 │   └── utils/                # text_extractor.py, cover_detector.py
 │
 ├── build.sh                  # 전체 빌드 스크립트
@@ -159,6 +176,9 @@ chmod +x build.sh
 | `POST` | `/rules` | 규칙 추가 |
 | `PATCH` | `/rules/{id}` | 규칙 수정 |
 | `DELETE` | `/rules/{id}` | 규칙 삭제 |
+| `GET` | `/settings/extensions` | 확장자 목록 조회 (기본 + 커스텀) |
+| `POST` | `/settings/extensions` | 커스텀 확장자 추가 |
+| `DELETE` | `/settings/extensions/{id}` | 커스텀 확장자 삭제 |
 | `GET` | `/apply/preview` | 정리 적용 미리보기 |
 | `POST` | `/apply` | 정리 적용 실행 |
 | `POST` | `/undo` | 되돌리기 |
@@ -179,6 +199,10 @@ cover_pages (file_id, cover_text, embedding, detected_at)
 cover_similarity_groups (group_id, file_id, similarity_score, auto_tag)
 
 action_logs (id, action_type, source_path, destination_path, executed_at, is_undone)
+
+rules (id, priority, type, value, folder_name, parent_id)
+
+custom_extensions (id, extension, category)
 ```
 
 ---

@@ -2,7 +2,7 @@ import re
 import os
 from typing import Optional
 from sqlalchemy.orm import Session
-from models.schema import Classification, Rule
+from models.schema import Classification, Rule, CustomExtension
 
 # 확장자 → 기본 카테고리 매핑
 _EXT_CATEGORY_MAP = {
@@ -11,35 +11,53 @@ _EXT_CATEGORY_MAP = {
     "doc": "문서",
     "txt": "문서",
     "md": "문서",
+    "hwp": "문서",
+    "rtf": "문서",
     "pptx": "프레젠테이션",
     "ppt": "프레젠테이션",
+    "key": "프레젠테이션",
     "xlsx": "스프레드시트",
     "xls": "스프레드시트",
-    "csv": "데이터",
+    "csv": "스프레드시트",
     "json": "데이터",
     "xml": "데이터",
+    "yaml": "데이터",
+    "sql": "데이터",
     "py": "코드",
     "js": "코드",
     "ts": "코드",
+    "jsx": "코드",
+    "tsx": "코드",
     "java": "코드",
     "cpp": "코드",
     "c": "코드",
     "h": "코드",
     "go": "코드",
     "rs": "코드",
+    "html": "코드",
+    "css": "코드",
     "jpg": "이미지",
     "jpeg": "이미지",
     "png": "이미지",
     "gif": "이미지",
     "svg": "이미지",
+    "webp": "이미지",
+    "bmp": "이미지",
     "mp4": "영상",
     "mov": "영상",
     "avi": "영상",
+    "mkv": "영상",
+    "webm": "영상",
     "mp3": "오디오",
     "wav": "오디오",
+    "flac": "오디오",
+    "aac": "오디오",
+    "ogg": "오디오",
     "zip": "압축",
     "tar": "압축",
     "gz": "압축",
+    "rar": "압축",
+    "7z": "압축",
 }
 
 # 파일명에서 연도 추출 패턴
@@ -80,10 +98,16 @@ def run(
                 "confidence_score": 0.85,
             }
 
-    # 확장자 기본 매핑
+    # 확장자 매핑 (기본 + 사용자 커스텀)
     ext_lower = extension.lstrip(".").lower()
-    if ext_lower in _EXT_CATEGORY_MAP:
-        category = _EXT_CATEGORY_MAP[ext_lower]
+    custom_exts = {
+        row.extension: row.category
+        for row in db.query(CustomExtension).all()
+    }
+    merged_ext_map = {**_EXT_CATEGORY_MAP, **custom_exts}
+
+    if ext_lower in merged_ext_map:
+        category = merged_ext_map[ext_lower]
         # 파일명에서 연도 추출해 태그 생성
         year_match = _YEAR_PATTERN.search(filename)
         tag = f"{category}_{year_match.group()}" if year_match else None

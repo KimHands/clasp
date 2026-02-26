@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  List, Network, Search, Filter, AlertTriangle,
-  ArrowLeft, FolderOpen, Settings, ChevronDown
+  List, Network, Search, AlertTriangle,
+  ArrowLeft, FolderOpen, Settings
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -11,12 +11,6 @@ import FileDetailPanel from '@/components/FileDetailPanel'
 import useScanStore from '@/store/scanStore'
 import useFileStore from '@/store/fileStore'
 import { getFiles } from '@/api/files'
-
-const LAYOUT_OPTIONS = [
-  { value: 'cluster', label: '클러스터 버블' },
-  { value: 'tree', label: '트리' },
-  { value: 'force', label: '포스 다이렉티드' },
-]
 
 const TIER_LABELS = { 1: 'T1', 2: 'T2', 3: 'T3' }
 const TIER_COLORS = { 1: 'secondary', 2: 'default', 3: 'warning' }
@@ -35,11 +29,9 @@ export default function Result() {
     setFiles, setPage, setFilters, setSelectedFile, setUnclassifiedCount,
   } = useFileStore()
 
-  const [viewMode, setViewMode] = useState('list') // 'list' | 'graph'
-  const [graphLayout, setGraphLayout] = useState('cluster')
+  const [viewMode, setViewMode] = useState('list')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
-  const [showLayoutMenu, setShowLayoutMenu] = useState(false)
 
   const fetchFiles = useCallback(async (overrides = {}) => {
     if (!scanId) return
@@ -154,37 +146,9 @@ export default function Result() {
                 viewMode === 'graph' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              <Network size={13} /> 그래프
+              <Network size={13} /> 마인드맵
             </button>
           </div>
-
-          {/* 그래프 레이아웃 선택 */}
-          {viewMode === 'graph' && (
-            <div className="relative">
-              <button
-                onClick={() => setShowLayoutMenu(!showLayoutMenu)}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs border border-gray-200 rounded-lg bg-white hover:bg-gray-50"
-              >
-                {LAYOUT_OPTIONS.find((o) => o.value === graphLayout)?.label}
-                <ChevronDown size={12} />
-              </button>
-              {showLayoutMenu && (
-                <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-36">
-                  {LAYOUT_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.value}
-                      onClick={() => { setGraphLayout(opt.value); setShowLayoutMenu(false) }}
-                      className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-50 ${
-                        graphLayout === opt.value ? 'text-blue-600 font-medium' : 'text-gray-700'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
 
           <span className="text-xs text-gray-400 ml-2">총 {total}개</span>
         </div>
@@ -287,7 +251,7 @@ export default function Result() {
             <div className="h-full" style={{ minHeight: 480 }}>
               <GraphView
                 files={files}
-                layout={graphLayout}
+                folderName={selectedFolder?.split('/').pop() || '스캔 결과'}
                 onNodeClick={handleNodeClick}
               />
             </div>
