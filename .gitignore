@@ -66,3 +66,9 @@ models/
 # Temporary files
 tmp/
 temp/
+
+# Debug / test scripts (electron)
+frontend/electron/debug*.js
+frontend/electron/main_test*.js
+frontend/electron/main.cjs
+frontend/electron/preload.mjs
