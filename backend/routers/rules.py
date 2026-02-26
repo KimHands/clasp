@@ -117,6 +117,14 @@ async def update_rule(
             parent = db.query(Rule).filter(Rule.id == body.parent_id).first()
             if not parent:
                 raise_error(ErrorCode.RULE_NOT_FOUND, "부모 규칙이 존재하지 않습니다")
+            # 간접 순환 참조 검증 (A→B→C→A 방지)
+            visited = {rule_id}
+            ancestor = parent
+            while ancestor and ancestor.parent_id:
+                if ancestor.parent_id in visited:
+                    raise_error(ErrorCode.INVALID_TYPE, "순환 참조가 발생합니다")
+                visited.add(ancestor.parent_id)
+                ancestor = db.query(Rule).filter(Rule.id == ancestor.parent_id).first()
         rule.parent_id = body.parent_id
 
     db.commit()

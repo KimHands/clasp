@@ -1,7 +1,7 @@
 import os
 import re
+import uuid
 import shutil
-from datetime import datetime
 from sqlalchemy.orm import Session
 
 from models.schema import File, Classification, ActionLog, Rule
@@ -111,12 +111,16 @@ def _get_destination(
     else:
         parts = ["기타"]
 
+    safe_filename = os.path.basename(file.filename)
+    if not safe_filename or safe_filename.startswith("."):
+        safe_filename = f"unnamed_{file.id}{file.extension or ''}"
+
     folder = os.path.join(base_dir, *parts)
-    dest = os.path.join(folder, file.filename)
+    dest = os.path.join(folder, safe_filename)
 
     # base_dir 범위 이탈 방지 (최종 이중 검증)
     if not os.path.normpath(dest).startswith(os.path.normpath(base_dir)):
-        dest = os.path.join(base_dir, "기타", file.filename)
+        dest = os.path.join(base_dir, "기타", safe_filename)
 
     return dest
 
@@ -137,11 +141,13 @@ def _resolve_conflict(dest_path: str, resolution: str) -> str:
     if resolution == "skip":
         return None
 
-    # rename: 중복 번호 부여
+    # rename: 중복 번호 부여 (상한 1000)
     base, ext = os.path.splitext(dest_path)
     counter = 1
     while os.path.exists(f"{base}_{counter}{ext}"):
         counter += 1
+        if counter > 1000:
+            return None
     return f"{base}_{counter}{ext}"
 
 
@@ -250,7 +256,7 @@ def apply_organize(
 
     # 공통 스캔 루트 디렉토리 (모든 파일 경로에서 commonpath 추출)
     base_dir = _find_common_base([f.path for f, _ in rows])
-    action_log_id = f"log_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    action_log_id = f"log_{uuid.uuid4().hex[:12]}"
 
     moved = 0
     skipped = 0
@@ -355,7 +361,7 @@ def undo_organize(db: Session, action_log_id: str) -> dict:
         if not os.path.exists(log.destination_path):
             unrestorable.append({
                 "filename": os.path.basename(log.destination_path),
-                "reason": "original_path_not_found",
+                "reason": "destination_file_not_found",
             })
             failed += 1
             continue

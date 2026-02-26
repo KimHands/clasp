@@ -1,49 +1,117 @@
 @import "tailwindcss";
 
+/* ─── iPhone Glassmorphism Design System ─── */
+
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Surface & Background */
+    --background: 220 20% 97%;
+    --foreground: 220 25% 10%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 220 25% 10%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
-    --radius: 0.5rem;
+    --popover-foreground: 220 25% 10%;
+
+    /* Brand */
+    --primary: 220 90% 56%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 15% 94%;
+    --secondary-foreground: 220 25% 18%;
+
+    /* Muted */
+    --muted: 220 15% 94%;
+    --muted-foreground: 220 10% 46%;
+
+    /* Accent */
+    --accent: 220 15% 94%;
+    --accent-foreground: 220 25% 18%;
+
+    /* Semantic */
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 142 72% 42%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    /* Border & Input */
+    --border: 220 15% 90%;
+    --input: 220 15% 90%;
+    --ring: 220 90% 56%;
+    --radius: 1rem;
+
+    /* Glass Tokens */
+    --glass-bg: rgba(255, 255, 255, 0.72);
+    --glass-bg-heavy: rgba(255, 255, 255, 0.85);
+    --glass-border: rgba(255, 255, 255, 0.5);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
+    --glass-shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.08);
+    --glass-blur: 20px;
+    --glass-blur-heavy: 40px;
+
+    /* Gradient Mesh Background */
+    --mesh-1: rgba(99, 102, 241, 0.08);
+    --mesh-2: rgba(168, 85, 247, 0.06);
+    --mesh-3: rgba(59, 130, 246, 0.06);
+    --mesh-4: rgba(236, 72, 153, 0.04);
+
+    /* Subtle overlay for inputs */
+    --input-bg: rgba(0, 0, 0, 0.03);
+    --input-focus-ring: rgba(99, 102, 241, 0.25);
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+    /* Surface & Background */
+    --background: 225 25% 8%;
+    --foreground: 220 15% 93%;
+    --card: 225 20% 12%;
+    --card-foreground: 220 15% 93%;
+    --popover: 225 20% 12%;
+    --popover-foreground: 220 15% 93%;
+
+    /* Brand */
+    --primary: 220 90% 65%;
+    --primary-foreground: 225 25% 8%;
+    --secondary: 225 15% 18%;
+    --secondary-foreground: 220 15% 90%;
+
+    /* Muted */
+    --muted: 225 15% 18%;
+    --muted-foreground: 220 10% 55%;
+
+    /* Accent */
+    --accent: 225 15% 18%;
+    --accent-foreground: 220 15% 90%;
+
+    /* Semantic */
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 142 72% 50%;
+    --success-foreground: 225 25% 8%;
+    --warning: 38 92% 55%;
+    --warning-foreground: 225 25% 8%;
+
+    /* Border & Input */
+    --border: 225 15% 18%;
+    --input: 225 15% 18%;
+    --ring: 220 90% 65%;
+
+    /* Glass Tokens (Dark) */
+    --glass-bg: rgba(255, 255, 255, 0.06);
+    --glass-bg-heavy: rgba(255, 255, 255, 0.1);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    --glass-shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.4);
+
+    /* Gradient Mesh Background (Dark) */
+    --mesh-1: rgba(99, 102, 241, 0.12);
+    --mesh-2: rgba(168, 85, 247, 0.08);
+    --mesh-3: rgba(59, 130, 246, 0.08);
+    --mesh-4: rgba(236, 72, 153, 0.06);
+
+    /* Subtle overlay for inputs */
+    --input-bg: rgba(255, 255, 255, 0.05);
+    --input-focus-ring: rgba(99, 102, 241, 0.35);
   }
 }
 
@@ -51,11 +119,118 @@
   * {
     border-color: hsl(var(--border));
   }
+
   body {
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
-    font-family: system-ui, -apple-system, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
+      'Helvetica Neue', system-ui, sans-serif;
     margin: 0;
     min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.2);
+    color: hsl(var(--foreground));
+  }
+}
+
+/* ─── Glass Utility Classes ─── */
+
+@layer utilities {
+  .glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+  }
+
+  .glass-heavy {
+    background: var(--glass-bg-heavy);
+    backdrop-filter: blur(var(--glass-blur-heavy));
+    -webkit-backdrop-filter: blur(var(--glass-blur-heavy));
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow-lg);
+  }
+
+  .glass-card {
+    background: var(--glass-bg-heavy);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    border-radius: var(--radius);
+  }
+
+  .mesh-gradient {
+    background:
+      radial-gradient(ellipse at 20% 20%, var(--mesh-1) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 20%, var(--mesh-2) 0%, transparent 50%),
+      radial-gradient(ellipse at 40% 80%, var(--mesh-3) 0%, transparent 50%),
+      radial-gradient(ellipse at 90% 70%, var(--mesh-4) 0%, transparent 50%),
+      hsl(var(--background));
+  }
+
+  .glass-input {
+    background: var(--input-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 0.75rem;
+    transition: all 0.2s ease;
+  }
+
+  .glass-input:focus {
+    outline: none;
+    border-color: hsl(var(--primary) / 0.5);
+    box-shadow: 0 0 0 3px var(--input-focus-ring);
+  }
+
+  .glass-header {
+    background: var(--glass-bg-heavy);
+    backdrop-filter: blur(var(--glass-blur-heavy));
+    -webkit-backdrop-filter: blur(var(--glass-blur-heavy));
+    border-bottom: 1px solid var(--glass-border);
+  }
+
+  .text-primary-themed {
+    color: hsl(var(--primary));
+  }
+
+  .text-muted-themed {
+    color: hsl(var(--muted-foreground));
+  }
+
+  .bg-themed {
+    background-color: hsl(var(--background));
+  }
+
+  .bg-card-themed {
+    background-color: hsl(var(--card));
+  }
+}
+
+/* ─── Smooth transitions for theme switching ─── */
+html {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* ─── Custom Scrollbar ─── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.2);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.35);
 }

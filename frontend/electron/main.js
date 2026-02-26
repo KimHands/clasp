@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, safeStorage } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import http from 'node:http'
@@ -19,7 +19,18 @@ function loadSettings() {
   try {
     const settingsPath = getSettingsPath()
     if (fs.existsSync(settingsPath)) {
-      return JSON.parse(fs.readFileSync(settingsPath, 'utf-8'))
+      const raw = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'))
+      if (raw.openai_api_key_encrypted && safeStorage.isEncryptionAvailable()) {
+        try {
+          raw.openai_api_key = safeStorage.decryptString(
+            Buffer.from(raw.openai_api_key_encrypted, 'base64')
+          )
+        } catch (_) {
+          raw.openai_api_key = null
+        }
+        delete raw.openai_api_key_encrypted
+      }
+      return raw
     }
   } catch (_) {}
   return {}
@@ -29,7 +40,12 @@ function saveSettings(data) {
   try {
     const settingsPath = getSettingsPath()
     fs.mkdirSync(path.dirname(settingsPath), { recursive: true })
-    fs.writeFileSync(settingsPath, JSON.stringify(data, null, 2), 'utf-8')
+    const toSave = { ...data }
+    if (toSave.openai_api_key && safeStorage.isEncryptionAvailable()) {
+      toSave.openai_api_key_encrypted = safeStorage.encryptString(toSave.openai_api_key).toString('base64')
+      delete toSave.openai_api_key
+    }
+    fs.writeFileSync(settingsPath, JSON.stringify(toSave, null, 2), 'utf-8')
   } catch (e) {
     console.error('[Settings] 저장 실패:', e.message)
   }
@@ -37,17 +53,18 @@ function saveSettings(data) {
 
 let mainWindow = null
 let backendProcess = null
+let backendAlive = false
 
 function startBackend() {
+  if (backendProcess && backendAlive) return
+
   const settings = loadSettings()
-  // 저장된 API Key를 백엔드 자식 프로세스의 환경변수로 주입
   const extraEnv = {}
   if (settings.openai_api_key) {
     extraEnv.OPENAI_API_KEY = settings.openai_api_key
   }
 
   if (isDev) {
-    // 개발 환경: uvicorn 직접 실행
     const backendDir = path.join(__dirname, '../../backend')
     backendProcess = spawn(
       path.join(backendDir, 'venv/bin/python'),
@@ -57,7 +74,6 @@ function startBackend() {
     backendProcess.stdout.on('data', (d) => console.log('[Backend]', d.toString()))
     backendProcess.stderr.on('data', (d) => console.error('[Backend]', d.toString()))
   } else {
-    // 프로덕션: PyInstaller 번들 실행
     const bundlePath = path.join(process.resourcesPath, 'backend', 'clasp-backend')
     backendProcess = spawn(bundlePath, [], {
       stdio: 'pipe',
@@ -65,8 +81,40 @@ function startBackend() {
     })
   }
 
+  backendAlive = true
+
   backendProcess.on('exit', (code) => {
     console.log(`[Backend] 종료 코드: ${code}`)
+    backendAlive = false
+    backendProcess = null
+  })
+}
+
+function waitForBackend(maxRetries = 30, intervalMs = 500) {
+  return new Promise((resolve, reject) => {
+    let attempts = 0
+    const check = () => {
+      attempts++
+      const req = http.get('http://127.0.0.1:8000/docs', (res) => {
+        res.resume()
+        if (res.statusCode === 200) {
+          resolve()
+        } else if (attempts < maxRetries) {
+          setTimeout(check, intervalMs)
+        } else {
+          reject(new Error('백엔드 응답 없음'))
+        }
+      })
+      req.on('error', () => {
+        if (attempts < maxRetries) {
+          setTimeout(check, intervalMs)
+        } else {
+          reject(new Error('백엔드 연결 실패'))
+        }
+      })
+      req.end()
+    }
+    check()
   })
 }
 
@@ -154,20 +202,28 @@ ipcMain.handle('app:getEnv', async (_event, key) => {
   return settings[key.toLowerCase()] || null
 })
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   startBackend()
-  // 백엔드 기동 대기 후 윈도우 생성
-  setTimeout(createWindow, isDev ? 1500 : 3000)
+  try {
+    await waitForBackend()
+  } catch (e) {
+    console.error('[Startup]', e.message)
+  }
+  createWindow()
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  app.on('activate', async () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      if (!backendAlive) {
+        startBackend()
+        try { await waitForBackend() } catch (_) {}
+      }
+      createWindow()
+    }
   })
 })
 
 app.on('window-all-closed', () => {
-  if (backendProcess) {
-    backendProcess.kill()
-  }
+  // macOS: 창만 닫고 백엔드는 유지 (activate로 재열기 대비)
   if (process.platform !== 'darwin') {
     app.quit()
   }
@@ -176,5 +232,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   if (backendProcess) {
     backendProcess.kill()
+    backendProcess = null
+    backendAlive = false
   }
 })

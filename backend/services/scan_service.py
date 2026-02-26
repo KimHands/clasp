@@ -1,5 +1,6 @@
 import os
 import asyncio
+import logging
 from datetime import datetime
 from typing import AsyncGenerator
 from sqlalchemy.orm import Session
@@ -11,18 +12,19 @@ from utils.cover_detector import extract_cover_text
 from services.cover_service import save_cover, compute_similarity_groups
 from engines import pipeline
 
-# 텍스트 추출 지원 확장자
+logger = logging.getLogger(__name__)
+
 TEXT_EXTRACTABLE = {".pdf", ".docx", ".doc", ".txt", ".md"}
 
-# 스캔 제외 디렉토리명
 EXCLUDED_DIRS = {
     "node_modules", ".git", "__pycache__", "venv", ".venv",
     "dist", "build", "release", ".cache", ".mypy_cache",
     ".pytest_cache", "site-packages", "eggs", ".eggs",
 }
 
-# 스캔 제외 확장자
 EXCLUDED_EXTENSIONS = {".pyc", ".pyo", ".pyd", ".so", ".dylib", ".dll", ".exe"}
+
+BATCH_SIZE = 50
 
 
 def _collect_files(folder_path: str) -> list[str]:
@@ -32,7 +34,6 @@ def _collect_files(folder_path: str) -> list[str]:
     """
     result = []
     for root, dirs, files in os.walk(folder_path, followlinks=False):
-        # 제외 디렉토리 건너뜀 (in-place 수정으로 하위 탐색 차단)
         dirs[:] = [
             d for d in dirs
             if d not in EXCLUDED_DIRS and not d.startswith(".")
@@ -73,23 +74,20 @@ async def run_scan(
     try:
         # Stage 1: 파일 목록 수집
         yield {"stage": 1, "message": "파일 목록 수집 중", "total": 0, "completed": 0, "current_file": ""}
-        await asyncio.sleep(0)
 
-        file_paths = _collect_files(folder_path)
+        file_paths = await asyncio.to_thread(_collect_files, folder_path)
         total = len(file_paths)
 
-        # Stage 2: 메타데이터 분석 + DB 저장 (체크포인트)
+        # Stage 2: 메타데이터 분석 + DB 저장 (배치 commit)
         yield {"stage": 2, "message": "메타데이터 분석 중", "total": total, "completed": 0, "current_file": ""}
-        await asyncio.sleep(0)
 
         file_records: dict[str, File] = {}
-        for i, path in enumerate(file_paths):
-            filename = os.path.basename(path)
+        for i, fpath in enumerate(file_paths):
+            filename = os.path.basename(fpath)
             extension = os.path.splitext(filename)[1].lower()
-            meta = _get_metadata(path)
+            meta = await asyncio.to_thread(_get_metadata, fpath)
 
-            # 이미 존재하는 파일이면 업데이트, 없으면 생성
-            existing = db.query(File).filter(File.path == path).first()
+            existing = db.query(File).filter(File.path == fpath).first()
             if existing:
                 existing.filename = filename
                 existing.extension = extension
@@ -98,7 +96,7 @@ async def run_scan(
                 file_record = existing
             else:
                 file_record = File(
-                    path=path,
+                    path=fpath,
                     filename=filename,
                     extension=extension,
                     created_at=meta["created_at"],
@@ -107,62 +105,70 @@ async def run_scan(
                 )
                 db.add(file_record)
 
-            db.commit()
-            db.refresh(file_record)
-            file_records[path] = file_record
+            if (i + 1) % BATCH_SIZE == 0 or i == total - 1:
+                db.commit()
+                for p in list(file_records.values())[-BATCH_SIZE:]:
+                    db.refresh(p)
+                db.refresh(file_record)
+
+            file_records[fpath] = file_record
 
             yield {"stage": 2, "message": "메타데이터 분석 중", "total": total, "completed": i + 1, "current_file": filename}
             await asyncio.sleep(0)
 
+        # flush 후 전체 refresh (배치 commit으로 인해 id가 할당되지 않은 레코드 보정)
+        db.commit()
+        for fpath, rec in file_records.items():
+            if rec.id is None:
+                db.refresh(rec)
+
         # Stage 3: 표지 탐지
         yield {"stage": 3, "message": "표지 탐지 중", "total": total, "completed": 0, "current_file": ""}
-        await asyncio.sleep(0)
 
         cover_count = 0
-        for i, path in enumerate(file_paths):
-            filename = os.path.basename(path)
-            cover_text = extract_cover_text(path)
+        for i, fpath in enumerate(file_paths):
+            filename = os.path.basename(fpath)
+            cover_text = await asyncio.to_thread(extract_cover_text, fpath)
             if cover_text:
-                file_record = file_records[path]
+                file_record = file_records[fpath]
                 save_cover(db, file_record.id, cover_text)
                 cover_count += 1
 
             yield {"stage": 3, "message": "표지 탐지 중", "total": total, "completed": i + 1, "current_file": filename}
             await asyncio.sleep(0)
 
-        # Stage 4: 본문 추출
+        # Stage 4: 본문 추출 (배치 commit)
         yield {"stage": 4, "message": "본문 추출 중", "total": total, "completed": 0, "current_file": ""}
-        await asyncio.sleep(0)
 
         extracted_texts: dict[str, str | None] = {}
-        for i, path in enumerate(file_paths):
-            filename = os.path.basename(path)
+        for i, fpath in enumerate(file_paths):
+            filename = os.path.basename(fpath)
             extension = os.path.splitext(filename)[1].lower()
 
             text = None
             if extension in TEXT_EXTRACTABLE:
-                text = extract_text(path)
+                text = await asyncio.to_thread(extract_text, fpath)
                 if text:
-                    file_record = file_records[path]
+                    file_record = file_records[fpath]
                     file_record.extracted_text_summary = text[:500]
-                    db.commit()
 
-            extracted_texts[path] = text
+            extracted_texts[fpath] = text
+
+            if (i + 1) % BATCH_SIZE == 0 or i == total - 1:
+                db.commit()
 
             yield {"stage": 4, "message": "본문 추출 중", "total": total, "completed": i + 1, "current_file": filename}
             await asyncio.sleep(0)
 
         # Stage 5: 분류 엔진 처리
         yield {"stage": 5, "message": "분류 엔진 처리 중", "total": total, "completed": 0, "current_file": ""}
-        await asyncio.sleep(0)
 
-        for i, path in enumerate(file_paths):
-            filename = os.path.basename(path)
+        for i, fpath in enumerate(file_paths):
+            filename = os.path.basename(fpath)
             extension = os.path.splitext(filename)[1].lower()
-            file_record = file_records[path]
-            text = extracted_texts.get(path)
+            file_record = file_records[fpath]
+            text = extracted_texts.get(fpath)
 
-            # 이전 수동 분류 확인
             manual_cls = (
                 db.query(Classification)
                 .filter(Classification.file_id == file_record.id, Classification.is_manual == True)
@@ -172,7 +178,7 @@ async def run_scan(
             manual_category = manual_cls.category if manual_cls else None
 
             result = await pipeline.classify(
-                file_path=path,
+                file_path=fpath,
                 filename=filename,
                 extension=extension,
                 extracted_text=text,
@@ -180,7 +186,6 @@ async def run_scan(
                 manual_category=manual_category,
             )
 
-            # 기존 자동 분류 결과 삭제 후 새로 저장
             db.query(Classification).filter(
                 Classification.file_id == file_record.id,
                 Classification.scan_id == scan_id,
@@ -197,18 +202,22 @@ async def run_scan(
                 is_manual=False,
             )
             db.add(cls)
-            db.commit()
+
+            if (i + 1) % BATCH_SIZE == 0 or i == total - 1:
+                db.commit()
 
             yield {"stage": 5, "message": "분류 엔진 처리 중", "total": total, "completed": i + 1, "current_file": filename}
             await asyncio.sleep(0)
 
         # Stage 6: 유사도 계산
         yield {"stage": 6, "message": "유사도 계산 중", "total": total, "completed": total, "current_file": ""}
-        await asyncio.sleep(0)
-        compute_similarity_groups(db)
+        await asyncio.to_thread(compute_similarity_groups, db)
 
         # Stage 7: 완료
         yield {"stage": 7, "message": "완료", "total": total, "completed": total, "current_file": ""}
 
+    except Exception as e:
+        logger.error("스캔 실패: %s", e, exc_info=True)
+        yield {"stage": -1, "message": f"스캔 중 오류 발생: {e}", "total": 0, "completed": 0, "current_file": ""}
     finally:
         db.close()

@@ -42,11 +42,12 @@ def compute_similarity_groups(db: Session) -> None:
     if len(covers) < 2:
         return
 
-    # 기존 유사도 그룹 삭제 후 재계산
     db.query(CoverSimilarityGroup).delete()
     db.commit()
 
-    # Union-Find로 그룹 묶기
+    # O(n²) 유사도 계산을 1회만 수행하고 캐싱
+    n = len(covers)
+    sim_cache: dict[tuple[int, int], float] = {}
     parent = {c.file_id: c.file_id for c in covers}
 
     def find(x):
@@ -58,20 +59,22 @@ def compute_similarity_groups(db: Session) -> None:
     def union(x, y):
         parent[find(x)] = find(y)
 
-    for i in range(len(covers)):
-        for j in range(i + 1, len(covers)):
+    for i in range(n):
+        for j in range(i + 1, n):
+            fid_i = covers[i].file_id
+            fid_j = covers[j].file_id
             score = compute_similarity(covers[i].embedding, covers[j].embedding)
+            sim_cache[(fid_i, fid_j)] = score
+            sim_cache[(fid_j, fid_i)] = score
             if score >= SIMILARITY_THRESHOLD:
-                union(covers[i].file_id, covers[j].file_id)
+                union(fid_i, fid_j)
 
-    # 그룹 ID 할당 (같은 루트 = 같은 그룹)
     group_map: dict[int, str] = {}
     for cover in covers:
         root = find(cover.file_id)
         if root not in group_map:
-            group_map[root] = str(uuid.uuid4())[:8]
+            group_map[root] = str(uuid.uuid4())
 
-    # 2개 이상 묶인 그룹만 저장
     root_counts: dict[int, list] = {}
     for cover in covers:
         root = find(cover.file_id)
@@ -82,11 +85,11 @@ def compute_similarity_groups(db: Session) -> None:
             continue
         group_id = group_map[root]
         for cover in group_covers:
-            # 그룹 내 평균 유사도 계산
-            scores = []
-            for other in group_covers:
-                if other.file_id != cover.file_id:
-                    scores.append(compute_similarity(cover.embedding, other.embedding))
+            scores = [
+                sim_cache.get((cover.file_id, other.file_id), 0.0)
+                for other in group_covers
+                if other.file_id != cover.file_id
+            ]
             avg_score = sum(scores) / len(scores) if scores else 0.0
 
             entry = CoverSimilarityGroup(

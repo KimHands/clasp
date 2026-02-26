@@ -5,6 +5,7 @@ import {
   AlertTriangle, File, RotateCcw, Maximize2,
 } from 'lucide-react'
 import { buildMindmapTree } from '@/graph/cytoscapeConfig'
+import useThemeStore from '@/store/themeStore'
 
 const ICON_MAP = {
   'file-text': FileText,
@@ -32,10 +33,6 @@ const NODE_GAP_Y = 12
 const RANK_GAP_X = 80
 const EXPAND_BTN_SPACE = 36
 
-/**
- * 트리 레이아웃 계산 — 각 노드의 (x, y, width, height) 좌표 결정
- * 재귀적으로 서브트리 높이를 계산한 뒤 수직 중앙 정렬
- */
 function layoutTree(node, collapsed, x = 0, depth = 0) {
   const h = NODE_H[node.type] || 36
   const w = getNodeWidth(node)
@@ -124,7 +121,7 @@ function CurvePath({ x1, y1, x2, y2, color }) {
   )
 }
 
-function ExpandButton({ x, y, isCollapsed, onClick, size = 22 }) {
+function ExpandButton({ x, y, isCollapsed, onClick, size = 22, isDark }) {
   const r = size / 2
   return (
     <g
@@ -132,11 +129,11 @@ function ExpandButton({ x, y, isCollapsed, onClick, size = 22 }) {
       onClick={(e) => { e.stopPropagation(); onClick() }}
       className="cursor-pointer"
     >
-      <circle r={r} fill="white" stroke="#D1D5DB" strokeWidth={1} />
+      <circle r={r} fill={isDark ? '#1E293B' : 'white'} stroke={isDark ? '#334155' : '#D1D5DB'} strokeWidth={1} />
       <text
         x={0} y={1}
         textAnchor="middle" dominantBaseline="central"
-        fill="#64748B" fontSize={12} fontWeight={500}
+        fill={isDark ? '#94A3B8' : '#64748B'} fontSize={12} fontWeight={500}
       >
         {isCollapsed ? '›' : '‹'}
       </text>
@@ -144,9 +141,15 @@ function ExpandButton({ x, y, isCollapsed, onClick, size = 22 }) {
   )
 }
 
-function MindmapNode({ node, collapsed, onToggle, onFileClick }) {
+function MindmapNode({ node, collapsed, onToggle, onFileClick, isDark }) {
   const isCollapsed = collapsed.has(node.id)
   const hasChildren = node.children && node.children.length > 0 && node.type !== 'file'
+
+  const cardFill = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.85)'
+  const cardStroke = isDark ? 'rgba(255,255,255,0.1)' : '#E5E7EB'
+  const textPrimary = isDark ? '#E2E8F0' : '#1E293B'
+  const textSecondary = isDark ? '#94A3B8' : '#64748B'
+  const textMuted = isDark ? '#64748B' : '#94A3B8'
 
   if (node.type === 'root') {
     return (
@@ -154,14 +157,14 @@ function MindmapNode({ node, collapsed, onToggle, onFileClick }) {
         <rect
           width={node.w} height={node.h}
           rx={14} ry={14}
-          fill="#1E293B"
+          fill={isDark ? '#6366F1' : '#1E293B'}
           filter="url(#cardShadow)"
         />
         <text
           x={node.w / 2} y={node.h / 2}
           textAnchor="middle" dominantBaseline="central"
           fill="white" fontSize={14} fontWeight={700}
-          fontFamily="system-ui, -apple-system, sans-serif"
+          fontFamily="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif"
         >
           {node.label.length > 16 ? node.label.slice(0, 14) + '…' : node.label}
         </text>
@@ -170,6 +173,7 @@ function MindmapNode({ node, collapsed, onToggle, onFileClick }) {
             x={node.w + 16} y={node.h / 2}
             isCollapsed={isCollapsed}
             onClick={() => onToggle(node.id)}
+            isDark={isDark}
           />
         )}
       </g>
@@ -182,47 +186,43 @@ function MindmapNode({ node, collapsed, onToggle, onFileClick }) {
         <rect
           width={node.w} height={node.h}
           rx={12} ry={12}
-          fill="white"
-          stroke="#E5E7EB" strokeWidth={1}
+          fill={cardFill}
+          stroke={cardStroke} strokeWidth={1}
           filter="url(#cardShadow)"
         />
-        {/* 왼쪽 컬러 바 */}
         <rect
           width={4} height={node.h - 16}
           x={6} y={8}
           rx={2} ry={2}
           fill={node.color}
         />
-        {/* 아이콘 */}
         <foreignObject x={18} y={0} width={22} height={node.h}>
           <div xmlns="http://www.w3.org/1999/xhtml" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
             <NodeIcon name={node.icon} size={16} />
           </div>
         </foreignObject>
-        {/* 라벨 */}
         <text
           x={44} y={node.h / 2}
           dominantBaseline="central"
-          fill="#1E293B" fontSize={13} fontWeight={600}
-          fontFamily="system-ui, -apple-system, sans-serif"
+          fill={textPrimary} fontSize={13} fontWeight={600}
+          fontFamily="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif"
         >
           {node.label}
         </text>
-        {/* 파일 수 */}
         <text
           x={node.w - (hasChildren ? 28 : 12)} y={node.h / 2}
           textAnchor="end" dominantBaseline="central"
-          fill="#94A3B8" fontSize={11}
-          fontFamily="system-ui, -apple-system, sans-serif"
+          fill={textMuted} fontSize={11}
+          fontFamily="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif"
         >
           {node.count}
         </text>
-        {/* 접기/펼치기 */}
         {hasChildren && (
           <ExpandButton
             x={node.w + 16} y={node.h / 2}
             isCollapsed={isCollapsed}
             onClick={() => onToggle(node.id)}
+            isDark={isDark}
           />
         )}
       </g>
@@ -235,11 +235,10 @@ function MindmapNode({ node, collapsed, onToggle, onFileClick }) {
         <rect
           width={node.w} height={node.h}
           rx={10} ry={10}
-          fill="white"
-          stroke="#E5E7EB" strokeWidth={1}
+          fill={cardFill}
+          stroke={cardStroke} strokeWidth={1}
           filter="url(#cardShadow)"
         />
-        {/* 왼쪽 컬러 바 */}
         <rect
           width={3} height={node.h - 14}
           x={6} y={7}
@@ -247,36 +246,38 @@ function MindmapNode({ node, collapsed, onToggle, onFileClick }) {
           fill={node.color}
           opacity={0.5}
         />
-        {/* 태그 아이콘 */}
         <foreignObject x={16} y={0} width={20} height={node.h}>
           <div xmlns="http://www.w3.org/1999/xhtml" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
             <Tag size={13} style={{ color: node.color, opacity: 0.7 }} />
           </div>
         </foreignObject>
-        {/* 라벨 */}
         <text
           x={40} y={node.h / 2}
           dominantBaseline="central"
-          fill="#475569" fontSize={12}
-          fontFamily="system-ui, -apple-system, sans-serif"
+          fill={textSecondary} fontSize={12}
+          fontFamily="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif"
         >
           {node.label.length > 16 ? node.label.slice(0, 14) + '…' : node.label}
         </text>
-        {/* 접기/펼치기 */}
         {node.children && node.children.length > 0 && (
           <ExpandButton
             x={node.w + 14} y={node.h / 2}
             isCollapsed={isCollapsed}
             onClick={() => onToggle(node.id)}
             size={18}
+            isDark={isDark}
           />
         )}
       </g>
     )
   }
 
-  const borderColor = node.unclassified ? '#FCA5A5' : node.lowConfidence ? '#FCD34D' : '#E5E7EB'
-  const bgColor = node.unclassified ? '#FEF2F2' : node.lowConfidence ? '#FFFBEB' : 'white'
+  const borderColor = node.unclassified ? '#FCA5A5' : node.lowConfidence ? '#FCD34D' : cardStroke
+  const bgColor = node.unclassified
+    ? (isDark ? 'rgba(239,68,68,0.1)' : '#FEF2F2')
+    : node.lowConfidence
+    ? (isDark ? 'rgba(234,179,8,0.1)' : '#FFFBEB')
+    : cardFill
 
   return (
     <g
@@ -291,18 +292,16 @@ function MindmapNode({ node, collapsed, onToggle, onFileClick }) {
         stroke={borderColor} strokeWidth={1}
         filter="url(#cardShadow)"
       />
-      {/* 파일 아이콘 */}
       <foreignObject x={10} y={0} width={20} height={node.h}>
         <div xmlns="http://www.w3.org/1999/xhtml" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
           <NodeIcon name={node.unclassified ? 'alert' : 'file-text'} size={14} />
         </div>
       </foreignObject>
-      {/* 파일명 */}
       <text
         x={34} y={node.h / 2}
         dominantBaseline="central"
-        fill="#374151" fontSize={11}
-        fontFamily="system-ui, -apple-system, sans-serif"
+        fill={isDark ? '#CBD5E1' : '#374151'} fontSize={11}
+        fontFamily="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif"
       >
         {node.label.length > 24 ? node.label.slice(0, 22) + '…' : node.label}
       </text>
@@ -318,6 +317,9 @@ export default function GraphView({ files, folderName, onNodeClick }) {
   const [dragging, setDragging] = useState(false)
   const dragStart = useRef(null)
   const initialCollapseApplied = useRef(false)
+
+  const { resolvedTheme } = useThemeStore()
+  const isDark = resolvedTheme === 'dark'
 
   const tree = useMemo(
     () => buildMindmapTree(files, folderName || '스캔 결과'),
@@ -411,10 +413,13 @@ export default function GraphView({ files, folderName, onNodeClick }) {
     dragStart.current = null
   }, [])
 
+  const shadowColor = isDark ? '#000000' : '#64748B'
+  const shadowOpacity = isDark ? 0.3 : 0.08
+
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-full rounded-xl bg-gradient-to-br from-slate-50/80 via-white to-blue-50/20 border border-gray-200 overflow-hidden select-none"
+      className="relative w-full h-full rounded-xl glass overflow-hidden select-none"
       style={{ minHeight: 480 }}
       onWheel={handleWheel}
       onPointerDown={handlePointerDown}
@@ -427,7 +432,7 @@ export default function GraphView({ files, folderName, onNodeClick }) {
         <button
           data-interactive
           onClick={collapseAll}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-white/95 backdrop-blur border border-gray-200 rounded-lg text-xs text-gray-600 hover:bg-gray-50 shadow-sm transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 glass rounded-lg text-xs text-[hsl(var(--foreground)/0.7)] hover:text-[hsl(var(--foreground))] transition-colors"
         >
           <RotateCcw size={12} />
           모두 접기
@@ -435,7 +440,7 @@ export default function GraphView({ files, folderName, onNodeClick }) {
         <button
           data-interactive
           onClick={expandAll}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-white/95 backdrop-blur border border-gray-200 rounded-lg text-xs text-gray-600 hover:bg-gray-50 shadow-sm transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 glass rounded-lg text-xs text-[hsl(var(--foreground)/0.7)] hover:text-[hsl(var(--foreground))] transition-colors"
         >
           <Maximize2 size={12} />
           모두 펼치기
@@ -443,7 +448,7 @@ export default function GraphView({ files, folderName, onNodeClick }) {
         <button
           data-interactive
           onClick={fitView}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-white/95 backdrop-blur border border-gray-200 rounded-lg text-xs text-gray-600 hover:bg-gray-50 shadow-sm transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 glass rounded-lg text-xs text-[hsl(var(--foreground)/0.7)] hover:text-[hsl(var(--foreground))] transition-colors"
         >
           <Maximize2 size={12} />
           맞춤
@@ -458,15 +463,13 @@ export default function GraphView({ files, folderName, onNodeClick }) {
       >
         <defs>
           <filter id="cardShadow" x="-8%" y="-12%" width="116%" height="132%">
-            <feDropShadow dx="0" dy="2" stdDeviation="4" floodColor="#64748B" floodOpacity="0.08" />
+            <feDropShadow dx="0" dy="2" stdDeviation="4" floodColor={shadowColor} floodOpacity={shadowOpacity} />
           </filter>
         </defs>
         <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
-          {/* 엣지 (커브) */}
           {edges.map((edge, i) => (
             <CurvePath key={i} {...edge} />
           ))}
-          {/* 노드 */}
           {nodes.map((node) => (
             <MindmapNode
               key={node.id}
@@ -474,20 +477,21 @@ export default function GraphView({ files, folderName, onNodeClick }) {
               collapsed={collapsed}
               onToggle={handleToggle}
               onFileClick={onNodeClick}
+              isDark={isDark}
             />
           ))}
         </g>
       </svg>
 
       {/* 범례 */}
-      <div className="absolute bottom-3 left-3 z-10 flex items-center gap-3 px-3 py-2 bg-white/90 backdrop-blur border border-gray-200 rounded-lg shadow-sm">
-        <span className="flex items-center gap-1.5 text-[10px] text-gray-500">
-          <span className="w-2.5 h-2.5 rounded-full bg-green-400" /> 높은 신뢰도
+      <div className="absolute bottom-3 left-3 z-10 flex items-center gap-3 px-3 py-2 glass rounded-lg">
+        <span className="flex items-center gap-1.5 text-[10px] text-[hsl(var(--muted-foreground))]">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" /> 높은 신뢰도
         </span>
-        <span className="flex items-center gap-1.5 text-[10px] text-gray-500">
-          <span className="w-2.5 h-2.5 rounded-full bg-yellow-400" /> 낮은 신뢰도
+        <span className="flex items-center gap-1.5 text-[10px] text-[hsl(var(--muted-foreground))]">
+          <span className="w-2.5 h-2.5 rounded-full bg-amber-400" /> 낮은 신뢰도
         </span>
-        <span className="flex items-center gap-1.5 text-[10px] text-gray-500">
+        <span className="flex items-center gap-1.5 text-[10px] text-[hsl(var(--muted-foreground))]">
           <span className="w-2.5 h-2.5 rounded-full bg-red-400" /> 미분류
         </span>
       </div>

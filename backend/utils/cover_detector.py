@@ -34,20 +34,23 @@ def extract_cover_text(file_path: str) -> Optional[str]:
     PDF 첫 페이지 텍스트 추출 후 표지 여부 판정
     표지로 판정되면 텍스트 반환, 아니면 None
     """
-    ext = file_path.lower().rsplit(".", 1)[-1]
-    if ext != "pdf":
+    import os
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext != ".pdf":
         return None
 
+    doc = None
     try:
         import fitz
         doc = fitz.open(file_path)
         if len(doc) == 0:
-            doc.close()
             return None
         first_page_text = doc[0].get_text("text").strip()
-        doc.close()
         if is_cover_page(first_page_text):
             return first_page_text
     except Exception:
         pass
+    finally:
+        if doc:
+            doc.close()
     return None

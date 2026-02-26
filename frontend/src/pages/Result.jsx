@@ -23,7 +23,7 @@ function HighlightText({ text, query }) {
     <>
       {parts.map((part, i) =>
         part.toLowerCase() === query.toLowerCase()
-          ? <mark key={i} className="bg-yellow-200 text-yellow-900 rounded-sm px-0.5">{part}</mark>
+          ? <mark key={i} className="bg-amber-500/20 text-amber-700 dark:text-amber-300 rounded-sm px-0.5">{part}</mark>
           : part
       )}
     </>
@@ -31,7 +31,7 @@ function HighlightText({ text, query }) {
 }
 
 function ConfidenceDot({ score }) {
-  const color = score < 0.31 ? 'bg-red-400' : score < 0.5 ? 'bg-yellow-400' : 'bg-green-400'
+  const color = score < 0.31 ? 'bg-red-400' : score < 0.5 ? 'bg-amber-400' : 'bg-emerald-400'
   return <span className={`inline-block w-2 h-2 rounded-full ${color}`} />
 }
 
@@ -57,8 +57,9 @@ export default function Result() {
       const params = { scanId, page, pageSize, ...filters, ...overrides }
       const data = await getFiles(params)
       setFiles(data.items, data.total)
-      const unclassified = data.items.filter((f) => f.confidence_score < 0.31).length
-      setUnclassifiedCount(unclassified)
+      if (data.unclassified_count != null) {
+        setUnclassifiedCount(data.unclassified_count)
+      }
     } catch (e) {
       console.error(e)
     } finally {
@@ -78,18 +79,16 @@ export default function Result() {
     setSearch(value)
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
-      setFilters({ search: value })
-      fetchFiles({ search: value, page: 1 })
       setPage(1)
+      setFilters({ search: value })
     }, 300)
   }
 
   const clearSearch = () => {
     setSearch('')
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    setFilters({ search: '' })
-    fetchFiles({ search: '', page: 1 })
     setPage(1)
+    setFilters({ search: '' })
     inputRef.current?.focus()
   }
 
@@ -113,13 +112,13 @@ export default function Result() {
   }
 
   return (
-    <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
+    <div className="h-screen mesh-gradient flex flex-col overflow-hidden">
       {/* 상단 헤더 */}
-      <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center gap-4 shrink-0">
-        <button onClick={() => navigate('/')} className="text-gray-400 hover:text-gray-600">
+      <header className="glass-header px-6 py-3 flex items-center gap-4 shrink-0">
+        <button onClick={() => navigate('/')} className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors">
           <ArrowLeft size={18} />
         </button>
-        <div className="flex items-center gap-1.5 text-sm text-gray-500 flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 text-sm text-[hsl(var(--muted-foreground))] flex-1 min-w-0">
           <FolderOpen size={14} />
           <span className="truncate">{selectedFolder}</span>
         </div>
@@ -138,32 +137,32 @@ export default function Result() {
 
       {/* 미분류 배너 */}
       {unclassifiedCount > 0 && (
-        <div className="bg-amber-50 border-b border-amber-200 px-6 py-2 flex items-center gap-2 shrink-0">
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-2 flex items-center gap-2 shrink-0">
           <AlertTriangle size={15} className="text-amber-500" />
-          <span className="text-sm text-amber-700">
+          <span className="text-sm text-amber-700 dark:text-amber-300">
             신뢰도 31% 미만 파일 <strong>{unclassifiedCount}개</strong>가 미분류 상태입니다. 정리 적용 시 자동 제외됩니다.
           </span>
         </div>
       )}
 
       {/* 툴바 */}
-      <div className="bg-white border-b border-gray-100 px-6 py-2.5 flex items-center gap-3 shrink-0">
+      <div className="glass-header px-6 py-2.5 flex items-center gap-3 shrink-0 !border-b !border-t-0">
         {/* 검색 */}
         <div className="flex items-center gap-2 flex-1 max-w-md">
           <div className="relative flex-1">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
             <input
               ref={inputRef}
               type="text"
               value={search}
               onChange={(e) => handleSearchChange(e.target.value)}
               placeholder="파일명, 경로, 카테고리, 태그 검색"
-              className="w-full pl-8 pr-8 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+              className="w-full pl-8 pr-8 py-1.5 text-sm glass-input"
             />
             {search && (
               <button
                 onClick={clearSearch}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500 transition-colors"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground)/0.5)] hover:text-[hsl(var(--foreground))] transition-colors"
               >
                 <X size={14} />
               </button>
@@ -173,26 +172,30 @@ export default function Result() {
 
         <div className="flex items-center gap-1 ml-auto">
           {/* 뷰 전환 */}
-          <div className="flex bg-gray-100 rounded-lg p-0.5">
+          <div className="flex glass rounded-xl p-0.5">
             <button
               onClick={() => setViewMode('list')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                viewMode === 'list' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
+                viewMode === 'list'
+                  ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] shadow-sm'
+                  : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
               }`}
             >
               <List size={13} /> 리스트
             </button>
             <button
               onClick={() => setViewMode('graph')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                viewMode === 'graph' ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
+                viewMode === 'graph'
+                  ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] shadow-sm'
+                  : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
               }`}
             >
               <Network size={13} /> 마인드맵
             </button>
           </div>
 
-          <span className="text-xs text-gray-400 ml-2">총 {total}개</span>
+          <span className="text-xs text-[hsl(var(--muted-foreground))] ml-2">총 {total}개</span>
         </div>
       </div>
 
@@ -200,20 +203,20 @@ export default function Result() {
       <div className="flex-1 flex overflow-hidden">
         <div className="flex-1 overflow-auto p-4">
           {loading ? (
-            <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+            <div className="flex items-center justify-center h-full text-[hsl(var(--muted-foreground))] text-sm">
               불러오는 중...
             </div>
           ) : viewMode === 'list' ? (
             /* 리스트 뷰 */
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="glass-card overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-100">
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">파일명</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">카테고리</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">태그</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">Tier</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500">신뢰도</th>
+                  <tr className="border-b border-[var(--glass-border)]">
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-[hsl(var(--muted-foreground))]">파일명</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-[hsl(var(--muted-foreground))]">카테고리</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-[hsl(var(--muted-foreground))]">태그</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-[hsl(var(--muted-foreground))]">Tier</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-[hsl(var(--muted-foreground))]">신뢰도</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -221,14 +224,18 @@ export default function Result() {
                     <tr
                       key={file.id}
                       onClick={() => handleRowClick(file)}
-                      className={`border-b border-gray-50 cursor-pointer hover:bg-blue-50 transition-colors ${
-                        selectedFile?.id === file.id ? 'bg-blue-50' : ''
-                      } ${file.confidence_score < 0.31 ? 'bg-red-50 hover:bg-red-100' : ''}`}
+                      className={`border-b border-[var(--glass-border)] cursor-pointer transition-all duration-150 ${
+                        selectedFile?.id === file.id
+                          ? 'bg-[hsl(var(--primary)/0.08)]'
+                          : file.confidence_score < 0.31
+                          ? 'bg-red-500/5 hover:bg-red-500/10'
+                          : 'hover:bg-[var(--input-bg)]'
+                      }`}
                     >
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <ConfidenceDot score={file.confidence_score} />
-                          <span className="font-medium text-gray-800 truncate max-w-48">
+                          <span className="font-medium text-[hsl(var(--foreground))] truncate max-w-48">
                             <HighlightText text={file.filename} query={search} />
                           </span>
                           {file.is_manual && (
@@ -236,15 +243,15 @@ export default function Result() {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-gray-600">
+                      <td className="px-4 py-3 text-[hsl(var(--foreground)/0.7)]">
                         {file.category
                           ? <HighlightText text={file.category} query={search} />
-                          : <span className="text-gray-300">-</span>}
+                          : <span className="text-[hsl(var(--muted-foreground)/0.4)]">-</span>}
                       </td>
-                      <td className="px-4 py-3 text-gray-500 text-xs">
+                      <td className="px-4 py-3 text-[hsl(var(--muted-foreground))] text-xs">
                         {file.tag
                           ? <HighlightText text={file.tag} query={search} />
-                          : <span className="text-gray-300">-</span>}
+                          : <span className="text-[hsl(var(--muted-foreground)/0.4)]">-</span>}
                       </td>
                       <td className="px-4 py-3">
                         <Badge variant={TIER_COLORS[file.tier_used] || 'secondary'} className="text-xs">
@@ -253,16 +260,16 @@ export default function Result() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <div className="w-16 bg-gray-100 rounded-full h-1.5">
+                          <div className="w-16 bg-[var(--input-bg)] rounded-full h-1.5 overflow-hidden">
                             <div
-                              className={`h-1.5 rounded-full ${
+                              className={`h-1.5 rounded-full transition-all ${
                                 file.confidence_score < 0.31 ? 'bg-red-400' :
-                                file.confidence_score < 0.5 ? 'bg-yellow-400' : 'bg-green-400'
+                                file.confidence_score < 0.5 ? 'bg-amber-400' : 'bg-emerald-400'
                               }`}
                               style={{ width: `${Math.round(file.confidence_score * 100)}%` }}
                             />
                           </div>
-                          <span className="text-xs text-gray-500">
+                          <span className="text-xs text-[hsl(var(--muted-foreground))]">
                             {Math.round(file.confidence_score * 100)}%
                           </span>
                         </div>
@@ -271,7 +278,7 @@ export default function Result() {
                   ))}
                   {files.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-4 py-12 text-center text-gray-400 text-sm">
+                      <td colSpan={5} className="px-4 py-12 text-center text-[hsl(var(--muted-foreground))] text-sm">
                         결과가 없습니다
                       </td>
                     </tr>
@@ -281,13 +288,13 @@ export default function Result() {
 
               {/* 페이지네이션 */}
               {total > pageSize && (
-                <div className="flex items-center justify-center gap-2 py-3 border-t border-gray-100">
+                <div className="flex items-center justify-center gap-2 py-3 border-t border-[var(--glass-border)]">
                   <Button
                     size="sm" variant="outline"
                     disabled={page === 1}
                     onClick={() => setPage(page - 1)}
                   >이전</Button>
-                  <span className="text-xs text-gray-500">
+                  <span className="text-xs text-[hsl(var(--muted-foreground))]">
                     {page} / {Math.ceil(total / pageSize)}
                   </span>
                   <Button

@@ -1,6 +1,7 @@
 import os
 import json
-from datetime import datetime
+import time
+import uuid
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
@@ -15,6 +16,34 @@ router = APIRouter(prefix="/scan", tags=["scan"])
 # 진행 중인 스캔 상태 저장 (메모리)
 _active_scans: dict[str, dict] = {}
 
+# TTL 기반 메모리 정리 (5분 초과 시 자동 제거)
+_SCAN_TTL_SECONDS = 300
+
+
+def _cleanup_stale_scans():
+    """TTL 초과 스캔 항목 정리"""
+    now = time.time()
+    stale = [sid for sid, info in _active_scans.items()
+             if now - info.get("created_at", 0) > _SCAN_TTL_SECONDS]
+    for sid in stale:
+        _active_scans.pop(sid, None)
+
+
+# Path Traversal 방지: 사용자 홈 디렉토리 하위만 허용
+_ALLOWED_ROOTS = [os.path.expanduser("~")]
+
+
+def _validate_folder_path(folder_path: str) -> str | None:
+    """
+    경로를 정규화하고 허용 범위 내인지 검증.
+    유효하면 정규화된 경로 반환, 아니면 None.
+    """
+    real = os.path.realpath(os.path.expanduser(folder_path))
+    for root in _ALLOWED_ROOTS:
+        if real.startswith(os.path.realpath(root) + os.sep) or real == os.path.realpath(root):
+            return real
+    return None
+
 
 class ScanStartRequest(BaseModel):
     folder_path: str
@@ -23,7 +52,13 @@ class ScanStartRequest(BaseModel):
 @router.post("/start")
 async def start_scan(body: ScanStartRequest):
     """UC-02: 스캔 시작"""
-    folder_path = body.folder_path
+    folder_path = _validate_folder_path(body.folder_path)
+
+    if folder_path is None:
+        return JSONResponse(
+            status_code=403,
+            content=fail(ErrorCode.PERMISSION_DENIED, "허용되지 않은 경로입니다"),
+        )
 
     if not os.path.exists(folder_path):
         return JSONResponse(
@@ -37,11 +72,13 @@ async def start_scan(body: ScanStartRequest):
             content=fail(ErrorCode.PERMISSION_DENIED, "폴더 접근 권한 없음"),
         )
 
-    # 스캔 ID 생성
-    scan_id = f"scan_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    _cleanup_stale_scans()
+
+    scan_id = f"scan_{uuid.uuid4().hex[:12]}"
     _active_scans[scan_id] = {
         "folder_path": folder_path,
         "status": "started",
+        "created_at": time.time(),
     }
 
     return JSONResponse(

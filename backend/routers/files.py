@@ -99,6 +99,15 @@ async def list_files(
 
     total = query.count()
 
+    # 전체 미분류 파일 수 (현재 필터와 무관하게 해당 scan_id 전체 기준)
+    unclassified_base = (
+        db.query(File, Classification)
+        .join(Classification, Classification.file_id == File.id)
+        .filter(Classification.id.in_(db.query(best_cls_subq.c.cls_id)))
+        .filter(Classification.confidence_score < 0.31)
+    )
+    unclassified_count = unclassified_base.count()
+
     result_pairs = (
         query
         .order_by(Classification.is_manual.desc(), Classification.classified_at.desc())
@@ -113,6 +122,7 @@ async def list_files(
         "total": total,
         "page": page,
         "page_size": page_size,
+        "unclassified_count": unclassified_count,
         "items": items,
     }))
 

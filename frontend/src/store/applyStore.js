@@ -13,6 +13,7 @@ const useApplyStore = create((set) => ({
 
   reset: () => set({
     preview: null,
+    lastActionLogId: null,
     applyResult: null,
     undoResult: null,
   }),

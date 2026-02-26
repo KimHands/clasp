@@ -1,4 +1,5 @@
 import { HashRouter, Routes, Route } from 'react-router-dom'
+import useThemeStore from '@/store/themeStore'
 import Home from '@/pages/Home'
 import Scan from '@/pages/Scan'
 import Result from '@/pages/Result'
@@ -8,6 +9,9 @@ import Settings from '@/pages/Settings'
 
 // Electron 환경에서는 HashRouter 사용 (file:// 프로토콜 대응)
 export default function App() {
+  // 스토어 초기화 시 테마가 자동 적용됨
+  useThemeStore()
+
   return (
     <HashRouter>
       <Routes>

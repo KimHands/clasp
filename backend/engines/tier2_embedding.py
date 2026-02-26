@@ -1,5 +1,11 @@
-from typing import Optional
 import json
+import logging
+from typing import Optional
+
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
+
+logger = logging.getLogger(__name__)
 
 # 카테고리별 대표 키워드 (임베딩 비교 기준)
 CATEGORY_KEYWORDS = {
@@ -47,9 +53,6 @@ def run(text: str) -> dict:
         return {"category": None, "tag": None, "confidence_score": 0.0, "embedding": None}
 
     try:
-        from sklearn.metrics.pairwise import cosine_similarity
-        import numpy as np
-
         model = _get_model()
         cat_embeddings = _get_category_embeddings()
 
@@ -77,7 +80,8 @@ def run(text: str) -> dict:
             "confidence_score": best_score,
             "embedding": embedding_json,
         }
-    except Exception:
+    except Exception as e:
+        logger.warning("Tier 2 임베딩 분류 실패: %s", e)
         return {"category": None, "tag": None, "confidence_score": 0.0, "embedding": None}
 
 
@@ -96,9 +100,6 @@ def compute_embedding(text: str) -> Optional[str]:
 def compute_similarity(embedding_json_a: str, embedding_json_b: str) -> float:
     """두 임베딩 JSON 간 코사인 유사도 계산"""
     try:
-        import numpy as np
-        from sklearn.metrics.pairwise import cosine_similarity
-
         a = np.array(json.loads(embedding_json_a))
         b = np.array(json.loads(embedding_json_b))
         return float(cosine_similarity(a.reshape(1, -1), b.reshape(1, -1))[0][0])

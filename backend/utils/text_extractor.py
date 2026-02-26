@@ -7,6 +7,7 @@ def extract_text(file_path: str) -> Optional[str]:
     파일 확장자에 따라 텍스트 추출 전략 선택
     - PDF: 1~2페이지 스킵 후 4구간 샘플링 (30/45/65/85%)
     - DOCX: 단락 기반 추출
+    - DOC: textract 사용 (설치된 경우)
     - TXT/MD: 전체 읽기 (최대 5000자)
     """
     ext = os.path.splitext(file_path)[1].lower()
@@ -15,6 +16,8 @@ def extract_text(file_path: str) -> Optional[str]:
             return _extract_pdf(file_path)
         elif ext == ".docx":
             return _extract_docx(file_path)
+        elif ext == ".doc":
+            return _extract_doc(file_path)
         elif ext in (".txt", ".md"):
             return _extract_plain(file_path)
     except Exception:
@@ -70,6 +73,38 @@ def _extract_docx(file_path: str) -> Optional[str]:
     doc = Document(file_path)
     paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
     return "\n".join(paragraphs)[:5000] if paragraphs else None
+
+
+def _extract_doc(file_path: str) -> Optional[str]:
+    """
+    .doc (레거시 Word) 파일 텍스트 추출.
+    subprocess로 textutil(macOS) 또는 antiword를 시도.
+    """
+    import subprocess
+    import platform
+
+    if platform.system() == "Darwin":
+        try:
+            result = subprocess.run(
+                ["textutil", "-convert", "txt", "-stdout", file_path],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return result.stdout.strip()[:5000]
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+    try:
+        result = subprocess.run(
+            ["antiword", file_path],
+            capture_output=True, text=True, timeout=10,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()[:5000]
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+    return None
 
 
 def _extract_plain(file_path: str) -> Optional[str]:

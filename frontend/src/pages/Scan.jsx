@@ -104,44 +104,48 @@ export default function Scan() {
     progress.total > 0 ? Math.round((progress.completed / progress.total) * 100) : 0
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-8">
+    <div className="min-h-screen mesh-gradient flex flex-col items-center justify-center p-8">
       <div className="w-full max-w-2xl">
         {/* 헤더 */}
         <div className="flex items-center gap-3 mb-8">
-          <button onClick={handleBack} className="text-gray-400 hover:text-gray-600 transition-colors">
+          <button onClick={handleBack} className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors">
             <ArrowLeft size={20} />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">폴더 스캔</h1>
+            <h1 className="text-2xl font-bold text-[hsl(var(--foreground))]">폴더 스캔</h1>
             <div className="flex items-center gap-1.5 mt-0.5">
-              <FolderOpen size={13} className="text-gray-400" />
-              <span className="text-xs text-gray-500 truncate max-w-md">{selectedFolder}</span>
+              <FolderOpen size={13} className="text-[hsl(var(--muted-foreground))]" />
+              <span className="text-xs text-[hsl(var(--muted-foreground))] truncate max-w-md">{selectedFolder}</span>
             </div>
           </div>
         </div>
 
         {/* 진행 상황 카드 */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 mb-6">
+        <div className="glass-card p-8 mb-6">
           {/* 전체 프로그레스 바 */}
           <div className="mb-6">
             <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-medium text-gray-700">
+              <span className="text-sm font-medium text-[hsl(var(--foreground))]">
                 {isCompleted ? '스캔 완료' : isError ? '오류 발생' : progress.message || '준비 중...'}
               </span>
-              <span className="text-sm text-gray-500">
+              <span className="text-sm text-[hsl(var(--muted-foreground))]">
                 {progress.total > 0 && `${progress.completed} / ${progress.total}`}
               </span>
             </div>
-            <div className="w-full bg-gray-100 rounded-full h-2">
+            <div className="w-full bg-[var(--input-bg)] rounded-full h-2 overflow-hidden">
               <div
-                className={`h-2 rounded-full transition-all duration-300 ${
-                  isError ? 'bg-red-500' : isCompleted ? 'bg-green-500' : 'bg-blue-500'
+                className={`h-2 rounded-full transition-all duration-500 ease-out ${
+                  isError
+                    ? 'bg-[hsl(var(--destructive))]'
+                    : isCompleted
+                    ? 'bg-emerald-500'
+                    : 'bg-[hsl(var(--primary))]'
                 }`}
                 style={{ width: `${isCompleted ? 100 : progressPercent}%` }}
               />
             </div>
             {progress.currentFile && (
-              <p className="text-xs text-gray-400 mt-1.5 truncate">
+              <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1.5 truncate">
                 처리 중: {progress.currentFile}
               </p>
             )}
@@ -158,28 +162,28 @@ export default function Scan() {
                 <div key={stage.id} className="flex items-center gap-3">
                   <div className="w-6 h-6 flex items-center justify-center shrink-0">
                     {isDone ? (
-                      <CheckCircle2 size={20} className="text-green-500" />
+                      <CheckCircle2 size={20} className="text-emerald-500" />
                     ) : isActive ? (
-                      <Loader2 size={20} className="text-blue-500 animate-spin" />
+                      <Loader2 size={20} className="text-[hsl(var(--primary))] animate-spin" />
                     ) : isError && currentStage === stage.id ? (
-                      <XCircle size={20} className="text-red-500" />
+                      <XCircle size={20} className="text-[hsl(var(--destructive))]" />
                     ) : (
-                      <div className="w-5 h-5 rounded-full border-2 border-gray-200" />
+                      <div className="w-5 h-5 rounded-full border-2 border-[hsl(var(--border))]" />
                     )}
                   </div>
                   <span
-                    className={`text-sm ${
+                    className={`text-sm transition-colors ${
                       isDone
-                        ? 'text-gray-700 font-medium'
+                        ? 'text-[hsl(var(--foreground))] font-medium'
                         : isActive
-                        ? 'text-blue-600 font-semibold'
-                        : 'text-gray-400'
+                        ? 'text-[hsl(var(--primary))] font-semibold'
+                        : 'text-[hsl(var(--muted-foreground))]'
                     }`}
                   >
                     {stage.label}
                   </span>
                   {isActive && progress.total > 0 && (
-                    <span className="ml-auto text-xs text-gray-400">
+                    <span className="ml-auto text-xs text-[hsl(var(--muted-foreground))]">
                       {progress.completed}/{progress.total}
                     </span>
                   )}

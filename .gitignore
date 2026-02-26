@@ -72,3 +72,6 @@ frontend/electron/debug*.js
 frontend/electron/main_test*.js
 frontend/electron/main.cjs
 frontend/electron/preload.mjs
+
+# Presentation guide (not for GitHub)
+GUIDE.md
