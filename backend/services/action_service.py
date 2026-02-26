@@ -68,36 +68,37 @@ def _resolve_conflict(dest_path: str, resolution: str) -> str:
     return f"{base}_{counter}{ext}"
 
 
+def _get_best_classifications(db: Session, scan_id: str) -> list[tuple]:
+    """파일별 최우선 분류 결과 반환 (수동 > 최신 자동)"""
+    all_cls = (
+        db.query(Classification)
+        .filter(Classification.scan_id == scan_id)
+        .order_by(Classification.is_manual.desc(), Classification.classified_at.desc())
+        .all()
+    )
+    best_cls: dict[int, Classification] = {}
+    for cls in all_cls:
+        if cls.file_id not in best_cls:
+            best_cls[cls.file_id] = cls
+        elif cls.is_manual and not best_cls[cls.file_id].is_manual:
+            best_cls[cls.file_id] = cls
+
+    if not best_cls:
+        return []
+
+    files_map = {
+        f.id: f for f in db.query(File).filter(File.id.in_(list(best_cls.keys()))).all()
+    }
+    return [(files_map[fid], cls) for fid, cls in best_cls.items() if fid in files_map]
+
+
 def build_preview(db: Session, scan_id: str) -> dict:
     """
     UC-06: 정리 적용 미리보기
     실제 파일 이동 없이 이동 계획 트리 반환
     """
-    from sqlalchemy import case, func
-
     rules = db.query(Rule).order_by(Rule.priority).all()
-
-    # 파일별 최신 분류 결과 (수동 우선)
-    subq = (
-        db.query(
-            Classification.file_id,
-            func.max(case((Classification.is_manual == True, 2), else_=1)).label("priority"),
-        )
-        .filter(Classification.scan_id == scan_id)
-        .group_by(Classification.file_id)
-        .subquery()
-    )
-
-    rows = (
-        db.query(File, Classification)
-        .join(Classification, (Classification.file_id == File.id) & (Classification.scan_id == scan_id))
-        .join(
-            subq,
-            (subq.c.file_id == File.id) &
-            (case((Classification.is_manual == True, 2), else_=1) == subq.c.priority),
-        )
-        .all()
-    )
+    rows = _get_best_classifications(db, scan_id)
 
     if not rows:
         raise_error(ErrorCode.SCAN_NOT_FOUND, "해당 스캔 ID의 분류 결과 없음")
@@ -164,30 +165,8 @@ def apply_organize(
     UC-06: 정리 적용 실행
     파일 이동 후 action_logs 저장
     """
-    from sqlalchemy import case, func
-
     rules = db.query(Rule).order_by(Rule.priority).all()
-
-    subq = (
-        db.query(
-            Classification.file_id,
-            func.max(case((Classification.is_manual == True, 2), else_=1)).label("priority"),
-        )
-        .filter(Classification.scan_id == scan_id)
-        .group_by(Classification.file_id)
-        .subquery()
-    )
-
-    rows = (
-        db.query(File, Classification)
-        .join(Classification, (Classification.file_id == File.id) & (Classification.scan_id == scan_id))
-        .join(
-            subq,
-            (subq.c.file_id == File.id) &
-            (case((Classification.is_manual == True, 2), else_=1) == subq.c.priority),
-        )
-        .all()
-    )
+    rows = _get_best_classifications(db, scan_id)
 
     if not rows:
         raise_error(ErrorCode.SCAN_NOT_FOUND, "해당 스캔 ID의 분류 결과 없음")
@@ -226,17 +205,18 @@ def apply_organize(
             continue
 
         try:
+            original_path = file.path
             os.makedirs(os.path.dirname(final_dest), exist_ok=True)
-            shutil.move(file.path, final_dest)
+            shutil.move(original_path, final_dest)
 
-            # DB 파일 경로 업데이트
+            # DB 파일 경로 업데이트 (이동 전 원본 경로 보존 후 업데이트)
             file.path = final_dest
             db.commit()
 
             log = ActionLog(
                 action_log_id=action_log_id,
                 action_type="move",
-                source_path=file.path,
+                source_path=original_path,
                 destination_path=final_dest,
                 is_undone=False,
             )
@@ -301,13 +281,15 @@ def undo_organize(db: Session, action_log_id: str) -> dict:
             continue
 
         try:
-            os.makedirs(os.path.dirname(log.source_path), exist_ok=True)
-            shutil.move(log.destination_path, log.source_path)
+            dest = log.destination_path
+            src = log.source_path
+            os.makedirs(os.path.dirname(src), exist_ok=True)
+            shutil.move(dest, src)
 
             # DB 파일 경로 복원
-            file = db.query(File).filter(File.path == log.destination_path).first()
+            file = db.query(File).filter(File.path == dest).first()
             if file:
-                file.path = log.source_path
+                file.path = src
                 db.commit()
 
             log.is_undone = True

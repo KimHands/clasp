@@ -14,14 +14,31 @@ from engines import pipeline
 # 텍스트 추출 지원 확장자
 TEXT_EXTRACTABLE = {".pdf", ".docx", ".doc", ".txt", ".md"}
 
+# 스캔 제외 디렉토리명
+EXCLUDED_DIRS = {
+    "node_modules", ".git", "__pycache__", "venv", ".venv",
+    "dist", "build", "release", ".cache", ".mypy_cache",
+    ".pytest_cache", "site-packages", "eggs", ".eggs",
+}
+
+# 스캔 제외 확장자
+EXCLUDED_EXTENSIONS = {".pyc", ".pyo", ".pyd", ".so", ".dylib", ".dll", ".exe"}
+
 
 def _collect_files(folder_path: str) -> list[str]:
-    """폴더 재귀 탐색으로 파일 경로 목록 수집"""
+    """폴더 재귀 탐색으로 파일 경로 목록 수집 (시스템/빌드 디렉토리 제외)"""
     result = []
-    for root, _, files in os.walk(folder_path):
+    for root, dirs, files in os.walk(folder_path):
+        # 제외 디렉토리 건너뜀 (in-place 수정으로 하위 탐색 차단)
+        dirs[:] = [
+            d for d in dirs
+            if d not in EXCLUDED_DIRS and not d.startswith(".")
+        ]
         for fname in files:
-            # 숨김 파일 제외
             if fname.startswith("."):
+                continue
+            ext = os.path.splitext(fname)[1].lower()
+            if ext in EXCLUDED_EXTENSIONS:
                 continue
             result.append(os.path.join(root, fname))
     return result
