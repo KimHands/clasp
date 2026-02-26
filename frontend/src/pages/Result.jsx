@@ -64,7 +64,7 @@ export default function Result() {
       return
     }
     fetchFiles()
-  }, [scanId, page])
+  }, [scanId, page, fetchFiles, navigate])
 
   const handleSearch = (e) => {
     e.preventDefault()

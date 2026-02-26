@@ -7,11 +7,8 @@ _DATE_PATTERN = re.compile(
     r"\d{4}[-./년]\s*\d{1,2}[-./월]?\s*\d{0,2}일?"
 )
 
-# 학번 패턴: 20자리 이하 숫자 (학번 형식)
+# 학번 패턴: 20XX + 6~8자리 숫자
 _STUDENT_ID_PATTERN = re.compile(r"\b20\d{6,8}\b")
-
-# 이름 패턴 (한글 2~4자)
-_NAME_PATTERN = re.compile(r"[가-힣]{2,4}")
 
 COVER_TEXT_MAX_LEN = 300
 

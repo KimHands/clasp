@@ -9,8 +9,24 @@ async function request(method, path, body = null) {
     options.body = JSON.stringify(body)
   }
 
-  const res = await fetch(`${BASE_URL}${path}`, options)
-  const json = await res.json()
+  let res
+  try {
+    res = await fetch(`${BASE_URL}${path}`, options)
+  } catch (networkErr) {
+    // 백엔드 미기동 또는 네트워크 단절 시 명확한 오류 메시지
+    const err = new Error('백엔드 서버에 연결할 수 없습니다. 앱을 재시작해 주세요.')
+    err.code = 'NETWORK_ERROR'
+    throw err
+  }
+
+  let json
+  try {
+    json = await res.json()
+  } catch {
+    const err = new Error(`서버 응답 파싱 실패 (HTTP ${res.status})`)
+    err.code = 'PARSE_ERROR'
+    throw err
+  }
 
   if (!json.success) {
     const err = new Error(json.error?.message || '요청 실패')

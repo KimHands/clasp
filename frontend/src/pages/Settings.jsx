@@ -4,7 +4,8 @@ import { ArrowLeft, Eye, EyeOff, Plus, X, Save, Key, ShieldAlert } from 'lucide-
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
-const STORAGE_KEY_API = 'clasp_openai_api_key'
+// API Key는 보안상 localStorage 대신 Electron 메인 프로세스(암호화된 파일)에 저장
+// 키워드는 민감 정보가 아니므로 localStorage 유지
 const STORAGE_KEY_KEYWORDS = 'clasp_sensitive_keywords'
 
 export default function Settings() {
@@ -14,19 +15,31 @@ export default function Settings() {
   const [keywords, setKeywords] = useState([])
   const [newKeyword, setNewKeyword] = useState('')
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   useEffect(() => {
-    const storedKey = localStorage.getItem(STORAGE_KEY_API) || ''
+    // Electron 메인 프로세스에서 저장된 API Key 로드
+    window.electronAPI?.getEnv?.('OPENAI_API_KEY').then((key) => {
+      if (key) setApiKey(key)
+    })
     const storedKeywords = JSON.parse(localStorage.getItem(STORAGE_KEY_KEYWORDS) || '[]')
-    setApiKey(storedKey)
     setKeywords(storedKeywords)
   }, [])
 
-  const handleSave = () => {
-    localStorage.setItem(STORAGE_KEY_API, apiKey)
+  const handleSave = async () => {
+    setSaveError('')
+    try {
+      // Electron IPC → 메인 프로세스가 설정 파일 저장 + 백엔드 HTTP 전달
+      const result = await window.electronAPI?.setEnv?.('OPENAI_API_KEY', apiKey)
+      if (result && !result.success) {
+        setSaveError('API Key 저장에 실패했습니다.')
+        return
+      }
+    } catch (e) {
+      setSaveError('백엔드 연결 실패: ' + e.message)
+      return
+    }
     localStorage.setItem(STORAGE_KEY_KEYWORDS, JSON.stringify(keywords))
-    // Electron IPC로 환경변수 전달 (있을 경우)
-    window.electronAPI?.setEnv?.('OPENAI_API_KEY', apiKey)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -131,6 +144,9 @@ export default function Settings() {
         </section>
 
         {/* 저장 버튼 */}
+        {saveError && (
+          <p className="text-xs text-red-500 text-center">{saveError}</p>
+        )}
         <Button onClick={handleSave} className="w-full" variant={saved ? 'outline' : 'default'}>
           <Save size={15} />
           {saved ? '저장됨 ✓' : '설정 저장'}

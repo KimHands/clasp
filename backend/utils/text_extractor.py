@@ -28,33 +28,37 @@ def _extract_pdf(file_path: str) -> Optional[str]:
     except ImportError:
         return None
 
-    doc = fitz.open(file_path)
-    total_pages = len(doc)
+    doc = None
+    try:
+        doc = fitz.open(file_path)
+        total_pages = len(doc)
 
-    if total_pages == 0:
-        return None
+        if total_pages == 0:
+            return None
 
-    # 3페이지 이상인 경우 1~2페이지(표지/목차) 스킵
-    start_page = 2 if total_pages >= 3 else 0
-    effective_pages = list(range(start_page, total_pages))
+        # 3페이지 이상인 경우 1~2페이지(표지/목차) 스킵
+        start_page = 2 if total_pages >= 3 else 0
+        effective_pages = list(range(start_page, total_pages))
 
-    if not effective_pages:
-        return None
+        if not effective_pages:
+            return None
 
-    # 4구간 샘플링 위치 (30%, 45%, 65%, 85%)
-    sample_ratios = [0.30, 0.45, 0.65, 0.85]
-    n = len(effective_pages)
-    sampled_indices = {effective_pages[min(int(r * n), n - 1)] for r in sample_ratios}
+        # 4구간 샘플링 위치 (30%, 45%, 65%, 85%)
+        sample_ratios = [0.30, 0.45, 0.65, 0.85]
+        n = len(effective_pages)
+        sampled_indices = {effective_pages[min(int(r * n), n - 1)] for r in sample_ratios}
 
-    chunks = []
-    for page_idx in sorted(sampled_indices):
-        page = doc[page_idx]
-        text = page.get_text("text")
-        if text:
-            chunks.append(text[:300])
+        chunks = []
+        for page_idx in sorted(sampled_indices):
+            page = doc[page_idx]
+            text = page.get_text("text")
+            if text:
+                chunks.append(text[:300])
 
-    doc.close()
-    return "\n".join(chunks) if chunks else None
+        return "\n".join(chunks) if chunks else None
+    finally:
+        if doc:
+            doc.close()
 
 
 def _extract_docx(file_path: str) -> Optional[str]:

@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 from datetime import datetime
 from sqlalchemy.orm import Session
@@ -7,6 +8,29 @@ from models.schema import File, Classification, ActionLog, Rule
 from utils.errors import ErrorCode, raise_error
 
 UNCLASSIFIED_THRESHOLD = 0.31
+
+# Path Traversal 방지: 폴더명에 허용되지 않는 문자 제거
+_UNSAFE_CHARS = re.compile(r'[/\\:*?"<>|\x00]|\.\.')
+
+
+def _sanitize_path_component(name: str) -> str:
+    """폴더명 구성 요소에서 경로 순회 위험 문자 제거"""
+    sanitized = _UNSAFE_CHARS.sub("_", name).strip(". ")
+    return sanitized or "기타"
+
+
+def _find_common_base(file_paths: list[str]) -> str:
+    """
+    파일 경로 목록에서 공통 스캔 루트 디렉토리 추출
+    첫 번째 파일의 부모를 사용하는 대신 os.path.commonpath로 정확한 루트 찾기
+    """
+    if not file_paths:
+        return os.sep
+    dirs = [os.path.dirname(p) for p in file_paths]
+    try:
+        return os.path.commonpath(dirs)
+    except ValueError:
+        return os.path.dirname(file_paths[0])
 
 
 def _get_destination(
@@ -26,22 +50,28 @@ def _get_destination(
             if rule.type == "date" and file.modified_at:
                 year = str(file.modified_at.year)
                 if year == rule.value:
-                    parts.append(rule.folder_name)
+                    parts.append(_sanitize_path_component(rule.folder_name))
             elif rule.type == "extension" and file.extension:
                 if file.extension.lstrip(".").lower() == rule.value.lower():
-                    parts.append(rule.folder_name)
+                    parts.append(_sanitize_path_component(rule.folder_name))
             elif rule.type == "content" and cls and cls.category:
                 if rule.value.lower() in cls.category.lower():
-                    parts.append(rule.folder_name)
+                    parts.append(_sanitize_path_component(rule.folder_name))
 
     # 규칙 매칭이 없으면 카테고리 폴더 사용
     if not parts and cls and cls.category:
-        parts.append(cls.category)
+        parts.append(_sanitize_path_component(cls.category))
     elif not parts:
         parts.append("기타")
 
     folder = os.path.join(base_dir, *parts)
-    return os.path.join(folder, file.filename)
+    dest = os.path.join(folder, file.filename)
+
+    # base_dir 범위 이탈 방지 (최종 이중 검증)
+    if not os.path.normpath(dest).startswith(os.path.normpath(base_dir)):
+        dest = os.path.join(base_dir, "기타", file.filename)
+
+    return dest
 
 
 def _resolve_conflict(dest_path: str, resolution: str) -> str:
@@ -103,8 +133,8 @@ def build_preview(db: Session, scan_id: str) -> dict:
     if not rows:
         raise_error(ErrorCode.SCAN_NOT_FOUND, "해당 스캔 ID의 분류 결과 없음")
 
-    # 스캔 폴더 기준 디렉토리 (첫 파일의 부모 디렉토리)
-    base_dir = os.path.dirname(rows[0][0].path)
+    # 공통 스캔 루트 디렉토리 (모든 파일 경로에서 commonpath 추출)
+    base_dir = _find_common_base([f.path for f, _ in rows])
 
     total_files = 0
     excluded_files = 0
@@ -171,7 +201,8 @@ def apply_organize(
     if not rows:
         raise_error(ErrorCode.SCAN_NOT_FOUND, "해당 스캔 ID의 분류 결과 없음")
 
-    base_dir = os.path.dirname(rows[0][0].path)
+    # 공통 스캔 루트 디렉토리 (모든 파일 경로에서 commonpath 추출)
+    base_dir = _find_common_base([f.path for f, _ in rows])
     action_log_id = f"log_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
     moved = 0
@@ -222,8 +253,10 @@ def apply_organize(
             )
             db.add(log)
             moved += 1
-        except Exception:
+        except Exception as e:
+            db.rollback()
             failed += 1
+            print(f"[apply] 파일 이동 실패 {file.path} → {final_dest}: {e}")
             log = ActionLog(
                 action_log_id=action_log_id,
                 action_type="failed",

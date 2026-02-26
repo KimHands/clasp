@@ -26,9 +26,12 @@ EXCLUDED_EXTENSIONS = {".pyc", ".pyo", ".pyd", ".so", ".dylib", ".dll", ".exe"}
 
 
 def _collect_files(folder_path: str) -> list[str]:
-    """폴더 재귀 탐색으로 파일 경로 목록 수집 (시스템/빌드 디렉토리 제외)"""
+    """
+    폴더 재귀 탐색으로 파일 경로 목록 수집 (시스템/빌드 디렉토리 제외)
+    followlinks=False: 심볼릭 링크를 따라가지 않아 순환 참조로 인한 무한 루프 방지
+    """
     result = []
-    for root, dirs, files in os.walk(folder_path):
+    for root, dirs, files in os.walk(folder_path, followlinks=False):
         # 제외 디렉토리 건너뜀 (in-place 수정으로 하위 탐색 차단)
         dirs[:] = [
             d for d in dirs

@@ -47,11 +47,21 @@ async def run(text: str, filename: str) -> dict:
         )
 
         content = response.choices[0].message.content.strip()
-        # JSON 블록 추출
+        # JSON 블록 추출 (```json ... ``` 또는 ``` ... ``` 형식 대응)
         if "```" in content:
-            content = content.split("```")[1]
-            if content.startswith("json"):
-                content = content[4:]
+            parts = content.split("```")
+            # 짝수 인덱스는 코드 블록 외부, 홀수 인덱스는 내부
+            for part in parts[1::2]:
+                candidate = part.lstrip("json").strip()
+                if candidate.startswith("{"):
+                    content = candidate
+                    break
+        # { ... } 범위만 추출 (앞뒤 불필요한 텍스트 제거)
+        start = content.find("{")
+        end = content.rfind("}") + 1
+        if start == -1 or end == 0:
+            return {"category": None, "tag": None, "confidence_score": 0.0}
+        content = content[start:end]
 
         result = json.loads(content)
         return {

@@ -1,6 +1,6 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-02-26T01:26:14.086Z",
+  "lastUpdated": "2026-02-26T01:55:37.000Z",
   "activeFeatures": [
     "backend",
     "__init__.py",
@@ -27,9 +27,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-02-26T00:43:51.555Z",
-        "lastUpdated": "2026-02-26T01:20:16.543Z"
+        "lastUpdated": "2026-02-26T01:34:48.030Z"
       },
-      "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/backend/run.py"
+      "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/backend/utils/cover_detector.py"
     },
     "__init__.py": {
       "phase": "do",
@@ -53,9 +53,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-02-26T00:44:13.912Z",
-        "lastUpdated": "2026-02-26T01:03:55.007Z"
+        "lastUpdated": "2026-02-26T01:34:36.142Z"
       },
-      "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/backend/engines/pipeline.py"
+      "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/backend/engines/tier3_llm.py"
     },
     "frontend": {
       "phase": "do",
@@ -66,7 +66,7 @@
       "documents": {},
       "timestamps": {
         "started": "2026-02-26T00:46:45.802Z",
-        "lastUpdated": "2026-02-26T01:19:36.661Z"
+        "lastUpdated": "2026-02-26T01:34:40.299Z"
       },
       "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/frontend/src/pages/Result.jsx"
     },
@@ -105,9 +105,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-02-26T00:47:50.568Z",
-        "lastUpdated": "2026-02-26T00:48:10.543Z"
+        "lastUpdated": "2026-02-26T01:34:56.391Z"
       },
-      "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/frontend/src/api/apply.js"
+      "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/frontend/src/api/client.js"
     },
     "electron": {
       "phase": "do",
@@ -118,9 +118,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-02-26T00:48:22.549Z",
-        "lastUpdated": "2026-02-26T00:48:27.014Z"
+        "lastUpdated": "2026-02-26T01:55:37.000Z"
       },
-      "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/frontend/electron/preload.js"
+      "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/frontend/electron/main.js"
     },
     "cover_service.py": {
       "phase": "do",
@@ -144,7 +144,7 @@
       "documents": {},
       "timestamps": {
         "started": "2026-02-26T01:04:31.861Z",
-        "lastUpdated": "2026-02-26T01:25:03.418Z"
+        "lastUpdated": "2026-02-26T01:34:19.818Z"
       },
       "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/backend/services/scan_service.py"
     },
@@ -183,7 +183,7 @@
       "documents": {},
       "timestamps": {
         "started": "2026-02-26T01:17:04.374Z",
-        "lastUpdated": "2026-02-26T01:26:14.086Z"
+        "lastUpdated": "2026-02-26T01:34:03.347Z"
       },
       "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/backend/services/action_service.py"
     }
@@ -196,7 +196,7 @@
   "session": {
     "startedAt": "2026-02-26T00:43:51.555Z",
     "onboardingCompleted": false,
-    "lastActivity": "2026-02-26T01:26:14.086Z"
+    "lastActivity": "2026-02-26T01:55:37.000Z"
   },
   "history": [
     {
@@ -604,6 +604,138 @@
     {
       "timestamp": "2026-02-26T01:26:14.086Z",
       "feature": "action_service.py",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:32:07.010Z",
+      "feature": "electron",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:32:40.040Z",
+      "feature": "electron",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:32:51.407Z",
+      "feature": "electron",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:33:02.986Z",
+      "feature": "backend",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:33:16.352Z",
+      "feature": "frontend",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:33:21.526Z",
+      "feature": "frontend",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:33:42.717Z",
+      "feature": "action_service.py",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:33:50.358Z",
+      "feature": "action_service.py",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:33:55.452Z",
+      "feature": "action_service.py",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:34:03.347Z",
+      "feature": "action_service.py",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:34:19.818Z",
+      "feature": "scan_service.py",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:34:28.994Z",
+      "feature": "backend",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:34:36.142Z",
+      "feature": "engines",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:34:40.299Z",
+      "feature": "frontend",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:34:48.030Z",
+      "feature": "backend",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:34:56.391Z",
+      "feature": "api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:44:50.594Z",
+      "feature": "electron",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:47:35.386Z",
+      "feature": "electron",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:47:43.516Z",
+      "feature": "electron",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:48:22.660Z",
+      "feature": "electron",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:49:22.065Z",
+      "feature": "electron",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-26T01:55:37.000Z",
+      "feature": "electron",
       "phase": "do",
       "action": "updated"
     }
