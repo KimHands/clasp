@@ -1,20 +1,15 @@
 from sqlalchemy.orm import Session
 from typing import Optional
 from engines import tier1_rule, tier2_embedding, tier3_llm
+from engines.tier2_embedding import infer_tag
 
-# Tier 1 → Tier 2 전환 임계값
-TIER1_CONFIDENCE_THRESHOLD = 0.80
-
-# 텍스트 추출이 불가능한 확장자 — Tier 2 호출 없이 Tier 1 결과로 즉시 반환
+# 텍스트 추출이 불가능한 확장자 — 텍스트 없으면 Tier 1만 사용
 _NON_TEXT_EXTENSIONS = {
     "jpg", "jpeg", "png", "gif", "svg", "webp", "bmp",
     "mp4", "mov", "avi", "mkv", "webm",
     "mp3", "wav", "flac", "aac", "ogg",
     "zip", "tar", "gz", "rar", "7z",
 }
-# Tier 2 → Tier 3 전환 임계값
-TIER2_CONFIDENCE_THRESHOLD = 0.50
-# 미분류 임계값 (이 이하면 미분류 처리)
 UNCLASSIFIED_THRESHOLD = 0.31
 
 
@@ -26,15 +21,16 @@ async def classify(
     db: Session,
     manual_category: Optional[str] = None,
     cover_text: Optional[str] = None,
+    custom_category_names: list[str] | None = None,
 ) -> dict:
     """
-    Tier 1 → 2 → 3 순차 실행
-    각 Tier 결과의 confidence_score 기준으로 다음 Tier 실행 여부 결정
-    cover_text: 표지 탐지 결과 — 본문 추출이 없는 경우 T2 입력으로 fallback 활용
+    Tier 1 + 2 항상 병렬 실행, API Key 있으면 Tier 3도 항상 실행.
+    모든 Tier 결과 중 최적의 카테고리/태그를 선택하여 반환.
+    cover_text: 표지 탐지 결과 — 본문 추출이 없는 경우 T2/T3 입력으로 fallback 활용
     반환: { category, tag, tier_used, confidence_score }
     """
 
-    # Tier 1: 규칙 기반
+    # ── Tier 1: 규칙 기반 (항상 실행) ──
     t1 = tier1_rule.run(
         file_path=file_path,
         filename=filename,
@@ -44,60 +40,52 @@ async def classify(
         extracted_text=extracted_text,
     )
 
-    if t1["confidence_score"] >= TIER1_CONFIDENCE_THRESHOLD:
-        return {**t1, "tier_used": 1}
-
-    # 텍스트 추출 불가 확장자는 Tier 2 호출 없이 Tier 1 결과 반환
-    # 단, 표지 텍스트가 있으면 T2 시도 가능
-    ext_lower = extension.lstrip(".").lower()
-    if ext_lower in _NON_TEXT_EXTENSIONS and not cover_text:
-        return {**t1, "tier_used": 1}
-
-    # T2에 사용할 텍스트 결정: 본문 추출 우선, 없으면 표지 텍스트로 fallback
+    # T2/T3에 사용할 텍스트 결정
     t2_input = extracted_text or cover_text
+    ext_lower = extension.lstrip(".").lower()
 
-    # Tier 2: 임베딩 유사도
-    if t2_input:
-        t2 = tier2_embedding.run(t2_input)
+    # 텍스트가 전혀 없는 비텍스트 확장자는 T1만 반환
+    if ext_lower in _NON_TEXT_EXTENSIONS and not t2_input:
+        return {**t1, "tier_used": 1}
 
-        # Tier 1과 Tier 2가 같은 카테고리를 가리키면 앙상블 신뢰도 보정
-        if (
-            t1["category"]
-            and t2["category"]
-            and t1["category"] == t2["category"]
-        ):
-            boosted_score = min(1.0, (t1["confidence_score"] + t2["confidence_score"]) / 2 + 0.10)
-            return {
-                "category": t1["category"],
-                "tag": t1["tag"],
-                "tier_used": 2,
-                "confidence_score": boosted_score,
-            }
+    if not t2_input:
+        return {**t1, "tier_used": 1}
 
-        if t2["confidence_score"] >= TIER2_CONFIDENCE_THRESHOLD:
-            return {
-                "category": t2["category"],
-                "tag": t2["tag"],
-                "tier_used": 2,
-                "confidence_score": t2["confidence_score"],
-            }
+    # ── Tier 2: 임베딩 유사도 (텍스트 있으면 항상 실행) ──
+    t2 = tier2_embedding.run(t2_input)
 
-        # Tier 3: 클라우드 LLM (Tier 2 threshold 미달 + API Key 있을 때)
-        # 표지 텍스트만 있는 경우 Tier 3 입력으로도 활용
-        t3_input = extracted_text or cover_text
-        if tier3_llm.is_available():
-            t3 = await tier3_llm.run(t3_input, filename)
-            if t3["confidence_score"] > max(t1["confidence_score"], t2["confidence_score"]):
-                return {**t3, "tier_used": 3}
+    # T1 + T2 결과 조합 → best 선정
+    if t1["category"] and t2["category"] and t1["category"] == t2["category"]:
+        boosted_score = min(1.0, (t1["confidence_score"] + t2["confidence_score"]) / 2 + 0.10)
+        content_tag = infer_tag(t2_input, t1["category"])
+        best = {
+            "category": t1["category"],
+            "tag": content_tag or t1["tag"],
+            "tier_used": 2,
+            "confidence_score": boosted_score,
+        }
+    elif t2["category"] and t2["confidence_score"] > t1["confidence_score"]:
+        content_tag = infer_tag(t2_input, t2["category"])
+        best = {
+            "category": t2["category"],
+            "tag": content_tag or t1["tag"],
+            "tier_used": 2,
+            "confidence_score": t2["confidence_score"],
+        }
+    else:
+        tag_category = t1["category"] or t2["category"]
+        content_tag = infer_tag(t2_input, tag_category) if tag_category else None
+        # 규칙 카테고리가 TAG_CANDIDATES에 없으면 T2 카테고리로 태그 추론 재시도
+        if not content_tag and t2.get("category") and t2["category"] != tag_category:
+            content_tag = infer_tag(t2_input, t2["category"])
+        best = {**t1, "tag": content_tag or t1["tag"], "tier_used": 1}
 
-        # Tier 1과 Tier 2 중 신뢰도가 높은 결과 채택
-        if t2["confidence_score"] > t1["confidence_score"]:
-            return {
-                "category": t2["category"],
-                "tag": t2["tag"],
-                "tier_used": 2,
-                "confidence_score": t2["confidence_score"],
-            }
+    # ── Tier 3: 클라우드 LLM (API Key 등록 시 항상 실행) ──
+    if tier3_llm.is_available():
+        t3 = await tier3_llm.run(t2_input, filename, extra_categories=custom_category_names)
+        if t3.get("category") and t3["confidence_score"] > best["confidence_score"]:
+            if not t3.get("tag"):
+                t3["tag"] = infer_tag(t2_input, t3["category"])
+            best = {**t3, "tier_used": 3}
 
-    # Tier 1 결과 사용 (텍스트 없거나 Tier 2 미개선)
-    return {**t1, "tier_used": 1}
+    return best

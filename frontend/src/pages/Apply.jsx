@@ -2,19 +2,37 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, FolderOpen, ChevronRight, ChevronDown,
-  AlertTriangle, CheckCircle2, RotateCcw, Loader2, FileX
+  AlertTriangle, CheckCircle2, RotateCcw, Loader2, FileX,
+  Clock, History,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import useScanStore from '@/store/scanStore'
 import useApplyStore from '@/store/applyStore'
-import { getApplyPreview, applyOrganize, undoApply } from '@/api/apply'
+import { getApplyPreview, applyOrganize, undoApply, getActionHistory } from '@/api/apply'
 
 const RESOLUTION_OPTIONS = [
   { value: 'rename', label: '이름 변경', desc: '파일명에 번호를 추가합니다 (report_1.pdf)' },
   { value: 'overwrite', label: '덮어쓰기', desc: '기존 파일을 덮어씁니다' },
   { value: 'skip', label: '건너뛰기', desc: '충돌 파일은 이동하지 않습니다' },
 ]
+
+const RESOLUTION_LABELS = { rename: '이름 변경', overwrite: '덮어쓰기', skip: '건너뛰기' }
+
+function formatDate(isoString) {
+  if (!isoString) return ''
+  const d = new Date(isoString)
+  const now = new Date()
+  const diffMs = now - d
+  const diffMin = Math.floor(diffMs / 60000)
+  if (diffMin < 1) return '방금 전'
+  if (diffMin < 60) return `${diffMin}분 전`
+  const diffHour = Math.floor(diffMin / 60)
+  if (diffHour < 24) return `${diffHour}시간 전`
+  const diffDay = Math.floor(diffHour / 24)
+  if (diffDay < 7) return `${diffDay}일 전`
+  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
 
 function TreeNode({ node, depth = 0 }) {
   const [open, setOpen] = useState(depth === 0)
@@ -166,15 +184,109 @@ function ConfirmModal({ totalFiles, onConfirm, onCancel }) {
   )
 }
 
+function HistoryTimeline({ history, onUndo, undoingId }) {
+  if (!history || history.length === 0) return null
+
+  return (
+    <div className="glass-card overflow-hidden">
+      <div className="px-5 py-3 border-b border-[var(--glass-border)] flex items-center gap-2">
+        <History size={15} className="text-[hsl(var(--muted-foreground))]" />
+        <h3 className="text-sm font-semibold text-[hsl(var(--foreground))]">정리 이력</h3>
+        <span className="text-xs text-[hsl(var(--muted-foreground))] ml-auto">{history.length}건</span>
+      </div>
+
+      <div className="max-h-80 overflow-y-auto">
+        {history.map((batch, idx) => {
+          const isFirst = idx === 0
+          const isLast = idx === history.length - 1
+
+          return (
+            <div
+              key={batch.action_log_id}
+              className={`relative flex items-start gap-4 px-5 py-4 ${
+                !isLast ? 'border-b border-[var(--glass-border)]' : ''
+              }`}
+            >
+              {/* 타임라인 도트 + 선 */}
+              <div className="flex flex-col items-center shrink-0 pt-0.5">
+                <div className={`w-3 h-3 rounded-full border-2 ${
+                  batch.is_undone
+                    ? 'border-[hsl(var(--muted-foreground)/0.3)] bg-transparent'
+                    : isFirst
+                    ? 'border-[hsl(var(--primary))] bg-[hsl(var(--primary))]'
+                    : 'border-emerald-500 bg-emerald-500'
+                }`} />
+                {!isLast && (
+                  <div className="w-px flex-1 min-h-[24px] bg-[hsl(var(--border))]" />
+                )}
+              </div>
+
+              {/* 내용 */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-sm font-medium text-[hsl(var(--foreground))]">
+                    {batch.moved_count}개 파일 이동
+                  </span>
+                  {batch.is_undone && (
+                    <Badge variant="outline" className="text-[10px] py-0 px-1.5 opacity-60">되돌림</Badge>
+                  )}
+                  {batch.conflict_resolution && (
+                    <Badge variant="secondary" className="text-[10px] py-0 px-1.5">
+                      {RESOLUTION_LABELS[batch.conflict_resolution] || batch.conflict_resolution}
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-3 text-xs text-[hsl(var(--muted-foreground))]">
+                  <span className="flex items-center gap-1">
+                    <Clock size={11} />
+                    {formatDate(batch.executed_at)}
+                  </span>
+                  {batch.skipped_count > 0 && (
+                    <span>{batch.skipped_count}건 건너뜀</span>
+                  )}
+                  {batch.failed_count > 0 && (
+                    <span className="text-red-400">{batch.failed_count}건 실패</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Undo 버튼 */}
+              {!batch.is_undone && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onUndo(batch.action_log_id)}
+                  disabled={undoingId === batch.action_log_id}
+                  className="shrink-0 text-xs gap-1 h-8"
+                >
+                  {undoingId === batch.action_log_id
+                    ? <Loader2 size={13} className="animate-spin" />
+                    : <RotateCcw size={13} />
+                  }
+                  되돌리기
+                </Button>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function Apply() {
   const navigate = useNavigate()
   const { scanId, selectedFolder } = useScanStore()
-  const { preview, lastActionLogId, applyResult, undoResult,
-    setPreview, setLastActionLogId, setApplyResult, setUndoResult, reset } = useApplyStore()
+  const {
+    preview, lastActionLogId, applyResult, undoResult, actionHistory,
+    setPreview, setLastActionLogId, setApplyResult, setUndoResult,
+    setActionHistory, markHistoryUndone, reset,
+  } = useApplyStore()
 
   const [loading, setLoading] = useState(false)
   const [applying, setApplying] = useState(false)
-  const [undoing, setUndoing] = useState(false)
+  const [undoingId, setUndoingId] = useState(null)
   const [showConflictModal, setShowConflictModal] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
 
@@ -182,6 +294,7 @@ export default function Apply() {
     if (!scanId) { navigate('/'); return }
     reset()
     loadPreview()
+    loadHistory()
   }, [scanId])
 
   const loadPreview = async () => {
@@ -193,6 +306,16 @@ export default function Apply() {
       console.error(e)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadHistory = async () => {
+    if (!selectedFolder) return
+    try {
+      const data = await getActionHistory(selectedFolder)
+      setActionHistory(data)
+    } catch (e) {
+      console.error(e)
     }
   }
 
@@ -210,9 +333,14 @@ export default function Apply() {
     setShowConfirmModal(false)
     setApplying(true)
     try {
-      const result = await applyOrganize({ scanId, conflictResolution: resolution })
+      const result = await applyOrganize({
+        scanId,
+        conflictResolution: resolution,
+        folderPath: selectedFolder,
+      })
       setApplyResult(result)
       setLastActionLogId(result.action_log_id)
+      loadHistory()
     } catch (e) {
       alert('정리 적용에 실패했습니다.')
     } finally {
@@ -220,17 +348,19 @@ export default function Apply() {
     }
   }
 
-  const handleUndo = async () => {
-    if (!lastActionLogId) return
-    setUndoing(true)
+  const handleUndo = async (actionLogId) => {
+    setUndoingId(actionLogId)
     try {
-      const result = await undoApply({ actionLogId: lastActionLogId })
-      setUndoResult(result)
-      setApplyResult(null)
+      const result = await undoApply({ actionLogId })
+      markHistoryUndone(actionLogId)
+      if (actionLogId === lastActionLogId) {
+        setUndoResult(result)
+        setApplyResult(null)
+      }
     } catch (e) {
       alert(e.message || '되돌리기에 실패했습니다.')
     } finally {
-      setUndoing(false)
+      setUndoingId(null)
     }
   }
 
@@ -269,11 +399,11 @@ export default function Apply() {
             <Button
               variant="outline"
               size="sm"
-              onClick={handleUndo}
-              disabled={undoing}
+              onClick={() => handleUndo(lastActionLogId)}
+              disabled={undoingId === lastActionLogId}
               className="mt-4"
             >
-              {undoing ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
+              {undoingId === lastActionLogId ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />}
               되돌리기
             </Button>
           </div>
@@ -374,6 +504,13 @@ export default function Apply() {
             ) : null}
           </>
         )}
+
+        {/* 이 폴더의 정리 이력 타임라인 */}
+        <HistoryTimeline
+          history={actionHistory}
+          onUndo={handleUndo}
+          undoingId={undoingId}
+        />
       </div>
 
       {/* 충돌 해결 모달 */}

@@ -47,7 +47,7 @@ function layoutTree(node, collapsed, x = 0, depth = 0) {
   const childLayouts = []
   const childX = x + w + EXPAND_BTN_SPACE + RANK_GAP_X
 
-  node.children.forEach((child, i) => {
+  node.children.forEach((child) => {
     const childLayout = layoutTree(child, collapsed, childX, depth + 1)
     childLayout.y = childY
     childLayouts.push(childLayout)
@@ -128,6 +128,7 @@ function ExpandButton({ x, y, isCollapsed, onClick, size = 22, isDark }) {
       transform={`translate(${x}, ${y})`}
       onClick={(e) => { e.stopPropagation(); onClick() }}
       className="cursor-pointer"
+      data-interactive
     >
       <circle r={r} fill={isDark ? '#1E293B' : 'white'} stroke={isDark ? '#334155' : '#D1D5DB'} strokeWidth={1} />
       <text
@@ -284,6 +285,7 @@ function MindmapNode({ node, collapsed, onToggle, onFileClick, isDark }) {
       transform={`translate(${node.x}, ${node.y})`}
       onClick={() => onFileClick?.(node.fileId)}
       className="cursor-pointer"
+      data-interactive
     >
       <rect
         width={node.w} height={node.h}
@@ -311,12 +313,15 @@ function MindmapNode({ node, collapsed, onToggle, onFileClick, isDark }) {
 
 export default function GraphView({ files, folderName, onNodeClick }) {
   const containerRef = useRef(null)
+  const svgRef = useRef(null)
+  const svgGroupRef = useRef(null)
   const [collapsed, setCollapsed] = useState(new Set())
-  const [pan, setPan] = useState({ x: 40, y: 40 })
-  const [zoom, setZoom] = useState(1)
-  const [dragging, setDragging] = useState(false)
-  const dragStart = useRef(null)
   const initialCollapseApplied = useRef(false)
+
+  // 드래그/줌 상태를 ref로 관리 — React 렌더링 없이 DOM 직접 조작
+  const panRef = useRef({ x: 40, y: 40 })
+  const zoomRef = useRef(1)
+  const dragState = useRef({ active: false, startX: 0, startY: 0, pointerId: null })
 
   const { resolvedTheme } = useThemeStore()
   const isDark = resolvedTheme === 'dark'
@@ -355,6 +360,81 @@ export default function GraphView({ files, folderName, onNodeClick }) {
     return max + 80
   }, [nodes])
 
+  // ref → DOM 직접 transform 적용 (리렌더 없음)
+  const applyTransform = useCallback(() => {
+    if (!svgGroupRef.current) return
+    const { x, y } = panRef.current
+    svgGroupRef.current.setAttribute(
+      'transform',
+      `translate(${x},${y}) scale(${zoomRef.current})`
+    )
+  }, [])
+
+  // ── 드래그 (Pointer Capture) ──────────────────────────────────────────────
+  const handlePointerDown = useCallback((e) => {
+    if (e.target.closest('[data-interactive]')) return
+    if (e.button !== 0) return
+    const ds = dragState.current
+    ds.active = true
+    ds.startX = e.clientX - panRef.current.x
+    ds.startY = e.clientY - panRef.current.y
+    ds.pointerId = e.pointerId
+    containerRef.current?.setPointerCapture(e.pointerId)
+    if (svgRef.current) svgRef.current.style.cursor = 'grabbing'
+  }, [])
+
+  const handlePointerMove = useCallback((e) => {
+    const ds = dragState.current
+    if (!ds.active) return
+    panRef.current = {
+      x: e.clientX - ds.startX,
+      y: e.clientY - ds.startY,
+    }
+    applyTransform()
+  }, [applyTransform])
+
+  const handlePointerUp = useCallback(() => {
+    const ds = dragState.current
+    if (!ds.active) return
+    ds.active = false
+    if (ds.pointerId != null) {
+      try { containerRef.current?.releasePointerCapture(ds.pointerId) } catch {}
+      ds.pointerId = null
+    }
+    if (svgRef.current) svgRef.current.style.cursor = 'grab'
+  }, [])
+
+  // ── 줌 (커서 위치 기준) ───────────────────────────────────────────────────
+  const handleWheel = useCallback((e) => {
+    e.preventDefault()
+    const rect = containerRef.current?.getBoundingClientRect()
+    if (!rect) return
+
+    const cx = e.clientX - rect.left
+    const cy = e.clientY - rect.top
+
+    const factor = e.deltaY > 0 ? 0.93 : 1.07
+    const oldZ = zoomRef.current
+    const newZ = Math.max(0.15, Math.min(oldZ * factor, 3))
+    const ratio = newZ / oldZ
+
+    panRef.current = {
+      x: cx - (cx - panRef.current.x) * ratio,
+      y: cy - (cy - panRef.current.y) * ratio,
+    }
+    zoomRef.current = newZ
+    applyTransform()
+  }, [applyTransform])
+
+  // passive: false로 등록해야 preventDefault()가 동작
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    el.addEventListener('wheel', handleWheel, { passive: false })
+    return () => el.removeEventListener('wheel', handleWheel)
+  }, [handleWheel])
+
+  // ── 컨트롤 ────────────────────────────────────────────────────────────────
   const handleToggle = useCallback((nodeId) => {
     setCollapsed((prev) => {
       const next = new Set(prev)
@@ -383,44 +463,14 @@ export default function GraphView({ files, folderName, onNodeClick }) {
     const scaleX = (cw - 60) / totalWidth
     const scaleY = (ch - 60) / totalHeight
     const s = Math.min(scaleX, scaleY, 1.2)
-    setZoom(Math.max(0.3, Math.min(s, 2)))
-    setPan({ x: 30, y: 30 })
-  }, [totalWidth, totalHeight])
+    zoomRef.current = Math.max(0.3, Math.min(s, 2))
+    panRef.current = { x: 30, y: 30 }
+    applyTransform()
+  }, [totalWidth, totalHeight, applyTransform])
 
   useEffect(() => {
     fitView()
   }, [files])
-
-  const handleWheel = useCallback((e) => {
-    e.preventDefault()
-    const delta = e.deltaY > 0 ? 0.92 : 1.08
-    setZoom((z) => Math.max(0.2, Math.min(z * delta, 3)))
-  }, [])
-
-  // React의 onWheel은 passive listener로 등록되어 preventDefault()가 불가하므로
-  // DOM에 직접 { passive: false }로 등록해야 확대/축소 시 페이지 스크롤을 막을 수 있음
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    el.addEventListener('wheel', handleWheel, { passive: false })
-    return () => el.removeEventListener('wheel', handleWheel)
-  }, [handleWheel])
-
-  const handlePointerDown = useCallback((e) => {
-    if (e.target.closest('[data-interactive]')) return
-    setDragging(true)
-    dragStart.current = { x: e.clientX - pan.x, y: e.clientY - pan.y }
-  }, [pan])
-
-  const handlePointerMove = useCallback((e) => {
-    if (!dragging || !dragStart.current) return
-    setPan({ x: e.clientX - dragStart.current.x, y: e.clientY - dragStart.current.y })
-  }, [dragging])
-
-  const handlePointerUp = useCallback(() => {
-    setDragging(false)
-    dragStart.current = null
-  }, [])
 
   const shadowColor = isDark ? '#000000' : '#64748B'
   const shadowOpacity = isDark ? 0.3 : 0.08
@@ -429,7 +479,7 @@ export default function GraphView({ files, folderName, onNodeClick }) {
     <div
       ref={containerRef}
       className="relative w-full h-full rounded-xl glass overflow-hidden select-none"
-      style={{ minHeight: 480 }}
+      style={{ minHeight: 480, touchAction: 'none' }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -465,16 +515,20 @@ export default function GraphView({ files, folderName, onNodeClick }) {
 
       {/* SVG 마인드맵 */}
       <svg
+        ref={svgRef}
         width="100%"
         height="100%"
-        style={{ cursor: dragging ? 'grabbing' : 'grab' }}
+        style={{ cursor: 'grab' }}
       >
         <defs>
           <filter id="cardShadow" x="-8%" y="-12%" width="116%" height="132%">
             <feDropShadow dx="0" dy="2" stdDeviation="4" floodColor={shadowColor} floodOpacity={shadowOpacity} />
           </filter>
         </defs>
-        <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
+        <g
+          ref={svgGroupRef}
+          transform={`translate(${panRef.current.x},${panRef.current.y}) scale(${zoomRef.current})`}
+        >
           {edges.map((edge, i) => (
             <CurvePath key={i} {...edge} />
           ))}

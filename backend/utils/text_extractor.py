@@ -7,8 +7,10 @@ def extract_text(file_path: str) -> Optional[str]:
     파일 확장자에 따라 텍스트 추출 전략 선택
     - PDF: 1~2페이지 스킵 후 4구간 샘플링 (30/45/65/85%)
     - DOCX: 단락 기반 추출
-    - DOC: textract 사용 (설치된 경우)
+    - DOC: textutil(macOS) / antiword 사용
     - TXT/MD: 전체 읽기 (최대 5000자)
+    - XLSX: 첫 시트 헤더 + 앞 5행 (openpyxl)
+    - CSV: 헤더 + 앞 5행 (내장 csv 모듈)
     """
     ext = os.path.splitext(file_path)[1].lower()
     try:
@@ -20,6 +22,10 @@ def extract_text(file_path: str) -> Optional[str]:
             return _extract_doc(file_path)
         elif ext in (".txt", ".md"):
             return _extract_plain(file_path)
+        elif ext == ".xlsx":
+            return _extract_xlsx(file_path)
+        elif ext == ".csv":
+            return _extract_csv(file_path)
     except Exception:
         return None
     return None
@@ -122,3 +128,59 @@ def _extract_plain(file_path: str) -> Optional[str]:
             return f.read(5000)
     except Exception:
         return None
+
+
+def _extract_xlsx(file_path: str) -> Optional[str]:
+    """
+    XLSX 첫 번째 시트에서 헤더 행 + 앞 5행 텍스트 추출.
+    열 이름과 셀 값을 쉼표로 연결해 Tier 2 임베딩 입력으로 활용.
+    read_only=True + data_only=True 로 수식 대신 계산값, 빠른 읽기 보장.
+    """
+    try:
+        from openpyxl import load_workbook
+    except ImportError:
+        return None
+
+    wb = None
+    try:
+        wb = load_workbook(file_path, read_only=True, data_only=True)
+        ws = wb.active
+        rows = []
+        for i, row in enumerate(ws.iter_rows(values_only=True)):
+            if i >= 6:  # 헤더 1행 + 데이터 5행
+                break
+            cells = [str(cell).strip() for cell in row if cell is not None and str(cell).strip()]
+            if cells:
+                rows.append(", ".join(cells))
+        return "\n".join(rows)[:5000] if rows else None
+    finally:
+        if wb:
+            wb.close()
+
+
+def _extract_csv(file_path: str) -> Optional[str]:
+    """
+    CSV 헤더 행 + 앞 5행 텍스트 추출.
+    열 이름이 내용 분류에 가장 유용한 정보를 담고 있으므로 헤더를 우선 포함.
+    """
+    import csv
+
+    rows = []
+    for encoding in ("utf-8", "utf-8-sig", "cp949", "euc-kr"):
+        try:
+            with open(file_path, "r", encoding=encoding, errors="strict", newline="") as f:
+                reader = csv.reader(f)
+                for i, row in enumerate(reader):
+                    if i >= 6:  # 헤더 1행 + 데이터 5행
+                        break
+                    cells = [cell.strip() for cell in row if cell.strip()]
+                    if cells:
+                        rows.append(", ".join(cells))
+            break  # 인코딩 성공 시 루프 탈출
+        except (UnicodeDecodeError, UnicodeError):
+            rows = []
+            continue
+        except Exception:
+            return None
+
+    return "\n".join(rows)[:5000] if rows else None

@@ -34,7 +34,7 @@ Clasp은 **3단계 AI 분류 엔진**을 통해 파일을 자동으로 분류하
 
 ```
 Tier 1 — 규칙 기반 (항상 동작)
-  ├── 사용자 정의 규칙 (우선순위 적용)
+  ├── 사용자 정의 규칙 (우선순위 적용) + 파일명 연도 태그 자동 생성
   ├── 확장자 매핑 (기본 55개 + 사용자 커스텀)
   └── 파일명 날짜 정규식
       → 신뢰도 ≥ 0.80: 분류 확정
@@ -46,6 +46,7 @@ Tier 2 — 임베딩 유사도 (텍스트 추출 가능 파일)
       → 신뢰도 < 0.50 + API 키 있음: Tier 3 호출
       → 신뢰도 < 0.50 + API 키 없음: 미분류 처리
 
+태그 추론: 규칙 카테고리가 TAG_CANDIDATES에 없으면 T2 카테고리로 fallback
 Tier 3 — 클라우드 LLM (선택적, API 키 필요)
   └── OpenAI API 분류
 
@@ -58,6 +59,9 @@ Tier 3 — 클라우드 LLM (선택적, API 키 필요)
 - 카테고리 → 태그 → 파일 계층 구조를 트리 형태로 시각화
 - 노드 접기/펼치기, 클릭 시 파일 상세 정보 패널 표시
 - 신뢰도 낮은 파일은 색상으로 강조 표시
+- **ref 기반 DOM 직접 조작**으로 드래그 시 리렌더 제거 (60fps)
+- **Pointer Capture** 적용 — 빠른 드래그 시에도 커서 이탈 없이 안정적 조작
+- **커서 위치 기준 줌** — 마우스가 가리키는 지점을 중심으로 확대/축소
 
 ### 3. 표지 유사도 탐지
 
@@ -71,11 +75,13 @@ Tier 3 — 클라우드 LLM (선택적, API 키 필요)
 - 규칙 추가 시 카테고리별 주요 확장자 드롭다운 제공 (55개 기본 내장)
 - 설정에서 확장자 추가/삭제 — 분류 엔진에 자동 반영
 
-### 5. 정리 적용 & Undo
+### 5. 정리 적용 & 폴더별 Undo 이력
 
 - 분류 결과에 따라 실제 파일 이동 실행
 - 이동 전 트리뷰 미리보기 (이동 파일 수, 생성 폴더 수 요약)
-- 원클릭 되돌리기(Undo) 지원 — 모든 이동 로그를 SQLite에 기록
+- **폴더별 정리 이력 자동 기록** — 폴더를 다시 열면 과거 모든 적용 이력 조회 가능
+- **선택적 Undo** — 최신뿐 아니라 과거 어떤 적용이든 독립적으로 되돌리기 가능
+- 타임라인 UI로 이력 시각화 (이동 건수, 시각, 충돌 처리 방식, 되돌림 상태 표시)
 
 ### 6. 실시간 진행 표시
 
@@ -254,8 +260,11 @@ cover_pages (file_id, cover_text, embedding, detected_at)
 -- 표지 유사도 기반 자동 그룹
 cover_similarity_groups (group_id, file_id, similarity_score, auto_tag)
 
--- 파일 이동 로그 (Undo 지원)
-action_logs (id, action_type, source_path, destination_path, executed_at, is_undone)
+-- 폴더별 정리 적용 배치 (이력 조회 및 선택적 Undo 단위)
+action_batches (action_log_id, folder_path, scan_id, moved_count, skipped_count, failed_count, conflict_resolution, executed_at, is_undone)
+
+-- 파일 이동 로그 (Undo 지원, action_batches FK)
+action_logs (id, action_log_id, action_type, source_path, destination_path, executed_at, is_undone)
 
 -- 사용자 정의 정리 규칙
 rules (id, priority, type, value, folder_name, parent_id)
@@ -285,6 +294,7 @@ custom_extensions (id, extension, category)
 | `GET` | `/apply/preview` | 정리 적용 미리보기 (트리뷰) |
 | `POST` | `/apply` | 정리 적용 실행 |
 | `POST` | `/undo` | 되돌리기 |
+| `GET` | `/apply/history` | 폴더별 정리 적용 이력 조회 |
 
 > 자세한 요청/응답 형식은 [API 명세서](./API_명세서.md)를 참고하세요.
 

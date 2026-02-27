@@ -104,9 +104,11 @@ def run(
     for rule in rules:
         matched = _match_rule(rule, file_path, filename, extension, extracted_text)
         if matched:
+            year_match = _YEAR_PATTERN.search(filename)
+            tag = f"{rule.folder_name}_{year_match.group()}" if year_match else None
             return {
                 "category": rule.folder_name,
-                "tag": None,
+                "tag": tag,
                 "confidence_score": 0.85,
             }
 

@@ -2,10 +2,13 @@ import os
 import re
 import uuid
 import shutil
+import logging
 from sqlalchemy.orm import Session
 
-from models.schema import File, Classification, ActionLog, Rule
+from models.schema import File, Classification, ActionLog, ActionBatch, Rule
 from utils.errors import ErrorCode, raise_error
+
+logger = logging.getLogger(__name__)
 
 UNCLASSIFIED_THRESHOLD = 0.31
 
@@ -93,12 +96,9 @@ def _get_destination(
     best_match: Rule | None = None
     for rule in sorted_rules:
         if _match_rule(rule, file, cls):
-            # 가장 깊은(구체적인) 매칭 규칙을 찾기 위해 자식 우선 탐색
-            # 부모도 매칭되고 자식도 매칭되면 자식이 더 구체적
             if best_match is None:
                 best_match = rule
             elif rule.parent_id is not None:
-                # 현재 best_match의 후손인지 확인
                 ancestor = rule
                 is_descendant = False
                 visited = set()
@@ -132,7 +132,7 @@ def _get_destination(
     return dest
 
 
-def _resolve_conflict(dest_path: str, resolution: str) -> str:
+def _resolve_conflict(dest_path: str, resolution: str) -> str | None:
     """
     충돌 해결 전략 적용
     - overwrite: 그대로 덮어쓰기
@@ -163,7 +163,6 @@ def _get_best_classifications(db: Session, scan_id: str) -> list[tuple]:
     파일별 최우선 분류 결과 반환 (수동 > 최신 자동)
     수동 분류(is_manual=True)는 scan_id와 무관하게 항상 우선 적용
     """
-    # 해당 scan의 자동 분류 결과
     auto_cls = (
         db.query(Classification)
         .filter(Classification.scan_id == scan_id, Classification.is_manual == False)
@@ -171,7 +170,6 @@ def _get_best_classifications(db: Session, scan_id: str) -> list[tuple]:
         .all()
     )
 
-    # 자동 분류된 파일 ID 수집
     file_ids = {cls.file_id for cls in auto_cls}
     if not file_ids:
         return []
@@ -181,7 +179,6 @@ def _get_best_classifications(db: Session, scan_id: str) -> list[tuple]:
         if cls.file_id not in best_cls:
             best_cls[cls.file_id] = cls
 
-    # 해당 파일들의 수동 분류 조회 (scan_id 무관)
     manual_cls = (
         db.query(Classification)
         .filter(Classification.file_id.in_(file_ids), Classification.is_manual == True)
@@ -209,7 +206,6 @@ def build_preview(db: Session, scan_id: str) -> dict:
     if not rows:
         raise_error(ErrorCode.SCAN_NOT_FOUND, "해당 스캔 ID의 분류 결과 없음")
 
-    # 공통 스캔 루트 디렉토리 (모든 파일 경로에서 commonpath 추출)
     base_dir = _find_common_base([f.path for f, _ in rows])
 
     total_files = 0
@@ -219,7 +215,6 @@ def build_preview(db: Session, scan_id: str) -> dict:
     preview_tree: dict[str, list] = {}
 
     for file, cls in rows:
-        # 미분류 파일 자동 제외
         if not cls or cls.confidence_score < UNCLASSIFIED_THRESHOLD:
             excluded_files += 1
             continue
@@ -229,7 +224,6 @@ def build_preview(db: Session, scan_id: str) -> dict:
         dest_dir = os.path.dirname(dest_path)
         folders_to_create.add(dest_dir)
 
-        # 충돌 감지
         if os.path.exists(dest_path) and dest_path != file.path:
             conflicts.append({
                 "filename": file.filename,
@@ -237,14 +231,12 @@ def build_preview(db: Session, scan_id: str) -> dict:
                 "conflict_type": "duplicate_name",
             })
 
-        # 트리 구조 구성
         rel_folder = os.path.relpath(dest_dir, base_dir)
         top_folder = rel_folder.split(os.sep)[0]
         if top_folder not in preview_tree:
             preview_tree[top_folder] = []
         preview_tree[top_folder].append(file.filename)
 
-    # 트리 직렬화
     tree_list = [
         {
             "folder": folder,
@@ -266,10 +258,11 @@ def apply_organize(
     db: Session,
     scan_id: str,
     conflict_resolution: str,
+    folder_path: str,
 ) -> dict:
     """
     UC-06: 정리 적용 실행
-    파일 이동 후 action_logs 저장
+    파일 이동 후 ActionBatch + ActionLog 저장
     """
     rules = db.query(Rule).order_by(Rule.priority).all()
     rows = _get_best_classifications(db, scan_id)
@@ -277,9 +270,18 @@ def apply_organize(
     if not rows:
         raise_error(ErrorCode.SCAN_NOT_FOUND, "해당 스캔 ID의 분류 결과 없음")
 
-    # 공통 스캔 루트 디렉토리 (모든 파일 경로에서 commonpath 추출)
     base_dir = _find_common_base([f.path for f, _ in rows])
     action_log_id = f"log_{uuid.uuid4().hex[:12]}"
+
+    # 배치 레코드 선행 생성 (FK 제약 충족)
+    batch = ActionBatch(
+        action_log_id=action_log_id,
+        folder_path=folder_path,
+        scan_id=scan_id,
+        conflict_resolution=conflict_resolution,
+    )
+    db.add(batch)
+    db.commit()
 
     moved = 0
     skipped = 0
@@ -314,10 +316,7 @@ def apply_organize(
             shutil.move(original_path, final_dest)
         except Exception as e:
             failed += 1
-            import logging
-            logging.getLogger(__name__).warning(
-                "파일 이동 실패 %s → %s: %s", original_path, final_dest, e
-            )
+            logger.warning("파일 이동 실패 %s → %s: %s", original_path, final_dest, e)
             db.add(ActionLog(
                 action_log_id=action_log_id,
                 action_type="failed",
@@ -339,6 +338,12 @@ def apply_organize(
         db.commit()
         moved += 1
 
+    # 배치 요약 갱신
+    batch.moved_count = moved
+    batch.skipped_count = skipped
+    batch.failed_count = failed
+    db.commit()
+
     return {
         "moved": moved,
         "skipped": skipped,
@@ -349,8 +354,14 @@ def apply_organize(
 
 def undo_organize(db: Session, action_log_id: str) -> dict:
     """
-    UC-07: 되돌리기 — action_logs 역방향 이동
+    UC-07: 되돌리기 — action_logs 역방향 이동 + 배치 상태 갱신
     """
+    batch = (
+        db.query(ActionBatch)
+        .filter(ActionBatch.action_log_id == action_log_id)
+        .first()
+    )
+
     logs = (
         db.query(ActionLog)
         .filter(
@@ -363,7 +374,6 @@ def undo_organize(db: Session, action_log_id: str) -> dict:
     if not logs:
         raise_error(ErrorCode.LOG_NOT_FOUND)
 
-    # 이미 되돌린 작업 확인
     if all(log.is_undone for log in logs):
         raise_error(ErrorCode.ALREADY_UNDONE)
 
@@ -375,7 +385,6 @@ def undo_organize(db: Session, action_log_id: str) -> dict:
         if log.is_undone:
             continue
 
-        # destination → source 역방향 이동
         if not os.path.exists(log.destination_path):
             unrestorable.append({
                 "filename": os.path.basename(log.destination_path),
@@ -390,7 +399,6 @@ def undo_organize(db: Session, action_log_id: str) -> dict:
             os.makedirs(os.path.dirname(src), exist_ok=True)
             shutil.move(dest, src)
 
-            # DB 파일 경로 복원
             file = db.query(File).filter(File.path == dest).first()
             if file:
                 file.path = src
@@ -406,8 +414,38 @@ def undo_organize(db: Session, action_log_id: str) -> dict:
                 "reason": "move_failed",
             })
 
+    if batch:
+        batch.is_undone = True
+        db.commit()
+
     return {
         "restored": restored,
         "failed": failed,
         "unrestorable": unrestorable,
     }
+
+
+def get_folder_history(db: Session, folder_path: str) -> list[dict]:
+    """
+    특정 폴더의 전체 정리 이력 조회 (최신순)
+    """
+    batches = (
+        db.query(ActionBatch)
+        .filter(ActionBatch.folder_path == folder_path)
+        .order_by(ActionBatch.executed_at.desc())
+        .all()
+    )
+
+    return [
+        {
+            "action_log_id": b.action_log_id,
+            "scan_id": b.scan_id,
+            "moved_count": b.moved_count,
+            "skipped_count": b.skipped_count,
+            "failed_count": b.failed_count,
+            "conflict_resolution": b.conflict_resolution,
+            "executed_at": b.executed_at.isoformat() if b.executed_at else None,
+            "is_undone": b.is_undone,
+        }
+        for b in batches
+    ]

@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Eye, EyeOff, Plus, X, Save, Key, ShieldAlert, FileType2, Trash2,
-  Sun, Moon, Monitor
+  Sun, Moon, Monitor, CheckCircle2, XCircle, Tags
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import useExtensionStore from '@/store/extensionStore'
 import useThemeStore from '@/store/themeStore'
+import { getLlmStatus, setOpenaiApiKey as saveOpenaiKey, setGeminiApiKey as saveGeminiKey } from '@/api/settings'
 
 const STORAGE_KEY_KEYWORDS = 'clasp_sensitive_keywords'
 
@@ -22,6 +23,8 @@ export default function Settings() {
   const { mode, setTheme } = useThemeStore()
   const [apiKey, setApiKey] = useState('')
   const [showKey, setShowKey] = useState(false)
+  const [geminiApiKey, setGeminiApiKey] = useState('')
+  const [showGeminiKey, setShowGeminiKey] = useState(false)
   const [keywords, setKeywords] = useState([])
   const [newKeyword, setNewKeyword] = useState('')
   const [saved, setSaved] = useState(false)
@@ -30,33 +33,63 @@ export default function Settings() {
   const [newExt, setNewExt] = useState('')
   const [newExtCategory, setNewExtCategory] = useState('')
   const [extError, setExtError] = useState('')
+  const [llmStatus, setLlmStatus] = useState(null)
 
-  const { extensions, categories, fetchExtensions, addExtension, removeExtension } = useExtensionStore()
+  const [newCatName, setNewCatName] = useState('')
+  const [newCatKeywords, setNewCatKeywords] = useState('')
+  const [catError, setCatError] = useState('')
+
+  const {
+    extensions, categories, customCategories,
+    fetchExtensions, addExtension, removeExtension,
+    fetchCategories, addCategory, removeCategory,
+  } = useExtensionStore()
+
+  const fetchLlmStatus = async () => {
+    try {
+      const data = await getLlmStatus()
+      setLlmStatus(data)
+    } catch (_) {
+      setLlmStatus(null)
+    }
+  }
 
   useEffect(() => {
     window.electronAPI?.getEnv?.('OPENAI_API_KEY').then((key) => {
       if (key) setApiKey(key)
     })
+    window.electronAPI?.getEnv?.('GEMINI_API_KEY').then((key) => {
+      if (key) setGeminiApiKey(key)
+    })
     const storedKeywords = JSON.parse(localStorage.getItem(STORAGE_KEY_KEYWORDS) || '[]')
     setKeywords(storedKeywords)
     fetchExtensions()
+    fetchCategories()
+    fetchLlmStatus()
   }, [])
 
   const handleSave = async () => {
     setSaveError('')
     try {
-      const result = await window.electronAPI?.setEnv?.('OPENAI_API_KEY', apiKey)
-      if (result && !result.success) {
-        setSaveError('API Key 저장에 실패했습니다.')
-        return
-      }
+      await Promise.all([
+        saveOpenaiKey(apiKey),
+        saveGeminiKey(geminiApiKey),
+      ])
     } catch (e) {
-      setSaveError('백엔드 연결 실패: ' + e.message)
+      setSaveError('백엔드 API Key 전달 실패: ' + e.message)
       return
     }
+    // Electron IPC — 앱 재시작 시에도 키 유지 (없으면 무시)
+    try {
+      await Promise.all([
+        window.electronAPI?.setEnv?.('OPENAI_API_KEY', apiKey),
+        window.electronAPI?.setEnv?.('GEMINI_API_KEY', geminiApiKey),
+      ])
+    } catch (_) { /* Electron IPC 없어도 백엔드에는 이미 전달됨 */ }
     localStorage.setItem(STORAGE_KEY_KEYWORDS, JSON.stringify(keywords))
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+    fetchLlmStatus()
   }
 
   const handleAddKeyword = (e) => {
@@ -113,38 +146,98 @@ export default function Settings() {
           </div>
         </section>
 
-        {/* OpenAI API Key */}
-        <section className="glass-card p-6">
+        {/* LLM API Keys */}
+        <section className="glass-card p-6 space-y-5">
           <div className="flex items-center gap-2 mb-1">
             <Key size={16} className="text-[hsl(var(--muted-foreground))]" />
-            <h2 className="text-sm font-bold text-[hsl(var(--foreground))]">OpenAI API Key</h2>
+            <h2 className="text-sm font-bold text-[hsl(var(--foreground))]">LLM API Key</h2>
             <Badge variant="secondary" className="text-xs">Tier 3 선택사항</Badge>
           </div>
-          <p className="text-xs text-[hsl(var(--muted-foreground))] mb-4">
-            API Key를 입력하면 신뢰도가 낮은 파일에 대해 GPT-4o-mini로 추가 분류를 수행합니다.
+          <p className="text-xs text-[hsl(var(--muted-foreground))]">
+            API Key를 입력하면 신뢰도가 낮은 파일에 대해 클라우드 LLM으로 추가 분류를 수행합니다.
             파일 원문은 전송되지 않으며, 요약 텍스트만 사용됩니다.
+            두 키가 모두 등록된 경우 OpenAI가 우선 사용됩니다.
           </p>
-          <div className="relative">
-            <input
-              type={showKey ? 'text' : 'password'}
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="sk-..."
-              className="w-full glass-input px-4 py-2.5 pr-10 text-sm font-mono"
-            />
-            <button
-              type="button"
-              onClick={() => setShowKey(!showKey)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors"
-            >
-              {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
-          </div>
-          {apiKey && (
-            <p className="text-xs text-emerald-500 mt-2">
-              API Key가 입력되었습니다. 저장 후 적용됩니다.
-            </p>
+
+          {/* 백엔드 적용 상태 */}
+          {llmStatus && (
+            <div className="flex flex-col gap-1.5 p-3 rounded-lg bg-[var(--input-bg)] border border-[var(--glass-border)]">
+              <p className="text-xs font-semibold text-[hsl(var(--muted-foreground))] mb-1">백엔드 적용 상태</p>
+              <div className="flex items-center gap-2 text-xs">
+                {llmStatus.openai_configured ? (
+                  <CheckCircle2 size={13} className="text-emerald-500 shrink-0" />
+                ) : (
+                  <XCircle size={13} className="text-[hsl(var(--muted-foreground))] shrink-0" />
+                )}
+                <span className={llmStatus.openai_configured ? 'text-emerald-500' : 'text-[hsl(var(--muted-foreground))]'}>
+                  OpenAI: {llmStatus.openai_configured ? '등록됨' : '미등록'}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                {llmStatus.gemini_configured ? (
+                  <CheckCircle2 size={13} className="text-emerald-500 shrink-0" />
+                ) : (
+                  <XCircle size={13} className="text-[hsl(var(--muted-foreground))] shrink-0" />
+                )}
+                <span className={llmStatus.gemini_configured ? 'text-emerald-500' : 'text-[hsl(var(--muted-foreground))]'}>
+                  Gemini: {llmStatus.gemini_configured ? '등록됨' : '미등록'}
+                </span>
+              </div>
+              {llmStatus.active_provider && (
+                <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
+                  활성 프로바이더: <span className="font-semibold text-[hsl(var(--foreground))]">{llmStatus.active_provider === 'openai' ? 'OpenAI' : 'Gemini'}</span>
+                </p>
+              )}
+            </div>
           )}
+
+          {/* OpenAI */}
+          <div>
+            <p className="text-xs font-semibold text-[hsl(var(--foreground))] mb-2">OpenAI (GPT-4o-mini)</p>
+            <div className="relative">
+              <input
+                type={showKey ? 'text' : 'password'}
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="sk-..."
+                className="w-full glass-input px-4 py-2.5 pr-10 text-sm font-mono"
+              />
+              <button
+                type="button"
+                onClick={() => setShowKey(!showKey)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors"
+              >
+                {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            {apiKey && (
+              <p className="text-xs text-emerald-500 mt-1.5">API Key가 입력되었습니다. 저장 후 적용됩니다.</p>
+            )}
+          </div>
+
+          {/* Gemini */}
+          <div>
+            <p className="text-xs font-semibold text-[hsl(var(--foreground))] mb-2">Google Gemini (gemini-1.5-flash)</p>
+            <div className="relative">
+              <input
+                type={showGeminiKey ? 'text' : 'password'}
+                value={geminiApiKey}
+                onChange={(e) => setGeminiApiKey(e.target.value)}
+                placeholder="AIza..."
+                className="w-full glass-input px-4 py-2.5 pr-10 text-sm font-mono"
+              />
+              <button
+                type="button"
+                onClick={() => setShowGeminiKey(!showGeminiKey)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors"
+              >
+                {showGeminiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            {geminiApiKey && (
+              <p className="text-xs text-emerald-500 mt-1.5">API Key가 입력되었습니다. 저장 후 적용됩니다.</p>
+            )}
+          </div>
         </section>
 
         {/* 민감 파일 키워드 */}
@@ -293,6 +386,123 @@ export default function Settings() {
               </div>
             ) : (
               <p className="text-xs text-[hsl(var(--muted-foreground))]">등록된 사용자 확장자가 없습니다.</p>
+            )}
+          </div>
+        </section>
+
+        {/* 카테고리 관리 */}
+        <section className="glass-card p-6">
+          <div className="flex items-center gap-2 mb-1">
+            <Tags size={16} className="text-[hsl(var(--muted-foreground))]" />
+            <h2 className="text-sm font-bold text-[hsl(var(--foreground))]">카테고리 관리</h2>
+          </div>
+          <p className="text-xs text-[hsl(var(--muted-foreground))] mb-4">
+            기본 5개 카테고리 외에 사용자 정의 카테고리를 추가하면 Tier 2(임베딩) 및 Tier 3(LLM)에서 자동으로 인식합니다.
+            키워드를 쉼표(,)로 구분하여 입력하면 분류 정확도가 높아집니다.
+          </p>
+
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault()
+              setCatError('')
+              const name = newCatName.trim()
+              if (!name) {
+                setCatError('카테고리 이름을 입력해주세요')
+                return
+              }
+              const keywords = newCatKeywords
+                .split(',')
+                .map((kw) => kw.trim())
+                .filter(Boolean)
+              try {
+                await addCategory({ name, keywords })
+                setNewCatName('')
+                setNewCatKeywords('')
+              } catch (err) {
+                setCatError(err.message || '카테고리 추가 실패')
+              }
+            }}
+            className="space-y-2 mb-4"
+          >
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newCatName}
+                onChange={(e) => setNewCatName(e.target.value)}
+                placeholder="카테고리 이름 (예: 디자인)"
+                className="w-36 glass-input px-3 py-2 text-sm"
+              />
+              <input
+                type="text"
+                value={newCatKeywords}
+                onChange={(e) => setNewCatKeywords(e.target.value)}
+                placeholder="키워드 (예: UI, UX, 피그마, 와이어프레임)"
+                className="flex-1 glass-input px-3 py-2 text-sm"
+              />
+              <Button type="submit" size="sm" variant="outline">
+                <Plus size={14} /> 추가
+              </Button>
+            </div>
+          </form>
+          {catError && <p className="text-xs text-[hsl(var(--destructive))] mb-3">{catError}</p>}
+
+          {/* 기본 카테고리 */}
+          <div className="mb-4">
+            <p className="text-xs font-semibold text-[hsl(var(--muted-foreground))] mb-2">기본 카테고리</p>
+            <div className="flex flex-wrap gap-1.5">
+              {customCategories.filter((c) => c.is_default).map((cat) => (
+                <span
+                  key={cat.name}
+                  className="inline-flex items-center bg-[var(--input-bg)] text-[hsl(var(--foreground)/0.7)] text-xs px-2.5 py-1 rounded-full border border-[var(--glass-border)]"
+                >
+                  {cat.name}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {/* 사용자 추가 카테고리 */}
+          <div>
+            <p className="text-xs font-semibold text-[hsl(var(--muted-foreground))] mb-2">사용자 추가 카테고리</p>
+            {customCategories.filter((c) => !c.is_default).length > 0 ? (
+              <div className="space-y-2">
+                {customCategories.filter((c) => !c.is_default).map((cat) => (
+                  <div
+                    key={cat.id}
+                    className="flex items-start gap-2 bg-[hsl(var(--primary)/0.08)] text-sm px-3 py-2 rounded-xl border border-[hsl(var(--primary)/0.2)]"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium text-[hsl(var(--primary))]">{cat.name}</span>
+                      {cat.keywords.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {cat.keywords.map((kw) => (
+                            <span
+                              key={kw}
+                              className="text-xs bg-[var(--input-bg)] text-[hsl(var(--muted-foreground))] px-1.5 py-0.5 rounded"
+                            >
+                              {kw}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await removeCategory(cat.id)
+                        } catch (err) {
+                          alert(err.message || '삭제 실패')
+                        }
+                      }}
+                      className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--destructive))] transition-all shrink-0 mt-0.5"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-[hsl(var(--muted-foreground))]">등록된 사용자 카테고리가 없습니다.</p>
             )}
           </div>
         </section>

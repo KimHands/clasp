@@ -1,3 +1,4 @@
+import json
 import os
 import asyncio
 import logging
@@ -6,15 +7,16 @@ from typing import AsyncGenerator
 from sqlalchemy.orm import Session
 
 from database import SessionLocal
-from models.schema import File, Classification
+from models.schema import File, Classification, CoverSimilarityGroup, CustomCategory
 from utils.text_extractor import extract_text
 from utils.cover_detector import extract_cover_text
 from services.cover_service import save_cover, compute_similarity_groups
 from engines import pipeline
+from engines import tier2_embedding
 
 logger = logging.getLogger(__name__)
 
-TEXT_EXTRACTABLE = {".pdf", ".docx", ".doc", ".txt", ".md"}
+TEXT_EXTRACTABLE = {".pdf", ".docx", ".doc", ".txt", ".md", ".xlsx", ".csv"}
 
 EXCLUDED_DIRS = {
     "node_modules", ".git", "__pycache__", "venv", ".venv",
@@ -77,6 +79,15 @@ async def run_scan(
 
         file_paths = await asyncio.to_thread(_collect_files, folder_path)
         total = len(file_paths)
+
+        # 커스텀 카테고리 로드 후 Tier 2 임베딩에 반영
+        custom_cat_rows = db.query(CustomCategory).all()
+        custom_cat_list = [
+            {"name": row.name, "keywords": json.loads(row.keywords)}
+            for row in custom_cat_rows
+        ]
+        await asyncio.to_thread(tier2_embedding.load_custom_categories, custom_cat_list)
+        custom_category_names = [row.name for row in custom_cat_rows] or None
 
         # Stage 2: 메타데이터 분석 + DB 저장 (배치 commit)
         yield {"stage": 2, "message": "메타데이터 분석 중", "total": total, "completed": 0, "current_file": ""}
@@ -190,6 +201,7 @@ async def run_scan(
                 cover_text=cover_texts.get(fpath),
                 db=db,
                 manual_category=manual_category,
+                custom_category_names=custom_category_names,
             )
 
             db.query(Classification).filter(
@@ -218,6 +230,26 @@ async def run_scan(
         # Stage 6: 유사도 계산
         yield {"stage": 6, "message": "유사도 계산 중", "total": total, "completed": total, "current_file": ""}
         await asyncio.to_thread(compute_similarity_groups, db)
+
+        # 유사도 그룹 auto_tag를 classification tag에 반영
+        # 이미 태그가 있는 파일은 덮어쓰지 않고, 태그 없는 파일에만 auto_tag 부여
+        similarity_groups = db.query(CoverSimilarityGroup).filter(
+            CoverSimilarityGroup.auto_tag.isnot(None)
+        ).all()
+        for group_entry in similarity_groups:
+            cls = (
+                db.query(Classification)
+                .filter(
+                    Classification.file_id == group_entry.file_id,
+                    Classification.scan_id == scan_id,
+                    Classification.is_manual == False,
+                )
+                .order_by(Classification.classified_at.desc())
+                .first()
+            )
+            if cls and not cls.tag:
+                cls.tag = group_entry.auto_tag
+        db.commit()
 
         # Stage 7: 완료
         yield {"stage": 7, "message": "완료", "total": total, "completed": total, "current_file": ""}
