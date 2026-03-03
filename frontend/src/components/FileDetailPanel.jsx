@@ -7,6 +7,17 @@ import useFileStore from '@/store/fileStore'
 
 const TIER_LABELS = { 1: 'Tier 1 규칙', 2: 'Tier 2 임베딩', 3: 'Tier 3 LLM' }
 const TIER_COLORS = { 1: 'secondary', 2: 'default', 3: 'warning' }
+const TIER_DESCRIPTIONS = {
+  1: '파일명·확장자·사용자 규칙으로 분류',
+  2: '텍스트 의미 유사도(임베딩)로 분류',
+  3: 'LLM AI가 내용을 분석해 분류',
+}
+const confidenceLabel = (score) => {
+  if (score >= 0.85) return '높음'
+  if (score >= 0.5) return '보통'
+  if (score >= 0.31) return '낮음'
+  return '미분류'
+}
 
 function ConfidenceBar({ score }) {
   const pct = Math.round(score * 100)
@@ -84,15 +95,25 @@ export default function FileDetailPanel({ file, onClose }) {
         <section>
           <p className="text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wide mb-2">분류 근거</p>
           <div className="space-y-2">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Layers size={14} className="text-[hsl(var(--muted-foreground))]" />
               <Badge variant={TIER_COLORS[file.tier_used] || 'secondary'}>
                 {TIER_LABELS[file.tier_used] || '-'}
               </Badge>
               {file.is_manual && <Badge variant="outline">수동</Badge>}
             </div>
+            {file.tier_used && (
+              <p className="text-xs text-[hsl(var(--muted-foreground)/0.8)] pl-5">
+                {TIER_DESCRIPTIONS[file.tier_used]}
+              </p>
+            )}
             <div>
-              <p className="text-xs text-[hsl(var(--muted-foreground))] mb-1">신뢰도</p>
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs text-[hsl(var(--muted-foreground))]">신뢰도</p>
+                <span className="text-xs font-medium text-[hsl(var(--muted-foreground))]">
+                  {confidenceLabel(file.confidence_score)}
+                </span>
+              </div>
               <ConfidenceBar score={file.confidence_score} />
             </div>
           </div>

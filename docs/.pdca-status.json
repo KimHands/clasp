@@ -1,6 +1,6 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-02-27T00:44:34.403Z",
+  "lastUpdated": "2026-03-03T00:48:24.341Z",
   "activeFeatures": [
     "backend",
     "__init__.py",
@@ -14,7 +14,8 @@
     "scan_service.py",
     "classify_service.py",
     "graph",
-    "action_service.py"
+    "action_service.py",
+    "dump"
   ],
   "primaryFeature": "backend",
   "features": {
@@ -53,9 +54,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-02-26T00:44:13.912Z",
-        "lastUpdated": "2026-02-27T00:26:50.367Z"
+        "lastUpdated": "2026-03-03T00:48:24.341Z"
       },
-      "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/backend/engines/pipeline.py"
+      "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/backend/engines/tier2_embedding.py"
     },
     "frontend": {
       "phase": "do",
@@ -66,9 +67,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-02-26T00:46:45.802Z",
-        "lastUpdated": "2026-02-27T00:44:34.403Z"
+        "lastUpdated": "2026-03-03T00:36:11.443Z"
       },
-      "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/frontend/src/pages/Apply.jsx"
+      "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/frontend/src/components/FileDetailPanel.jsx"
     },
     "ui": {
       "phase": "do",
@@ -144,7 +145,7 @@
       "documents": {},
       "timestamps": {
         "started": "2026-02-26T01:04:31.861Z",
-        "lastUpdated": "2026-02-26T22:48:27.218Z"
+        "lastUpdated": "2026-03-03T00:35:23.590Z"
       },
       "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/backend/services/scan_service.py"
     },
@@ -186,6 +187,19 @@
         "lastUpdated": "2026-02-27T00:42:45.671Z"
       },
       "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/backend/services/action_service.py"
+    },
+    "dump": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-02-27T01:28:17.105Z",
+        "lastUpdated": "2026-02-27T01:28:29.678Z"
+      },
+      "lastFile": "/Users/kimjonggun/Library/Mobile Documents/com~apple~CloudDocs/01_Personal/07_Project/Clasp/dump/auth_middleware.ts"
     }
   },
   "pipeline": {
@@ -196,7 +210,7 @@
   "session": {
     "startedAt": "2026-02-26T00:43:51.555Z",
     "onboardingCompleted": false,
-    "lastActivity": "2026-02-27T00:44:34.403Z"
+    "lastActivity": "2026-03-03T00:48:24.341Z"
   },
   "history": [
     {
@@ -2236,6 +2250,78 @@
     {
       "timestamp": "2026-02-27T00:44:34.403Z",
       "feature": "frontend",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-27T01:28:17.105Z",
+      "feature": "dump",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-02-27T01:28:29.678Z",
+      "feature": "dump",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T00:34:15.052Z",
+      "feature": "engines",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T00:35:07.425Z",
+      "feature": "scan_service.py",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T00:35:23.590Z",
+      "feature": "scan_service.py",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T00:35:58.455Z",
+      "feature": "frontend",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T00:36:11.443Z",
+      "feature": "frontend",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T00:47:15.465Z",
+      "feature": "engines",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T00:47:26.607Z",
+      "feature": "engines",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T00:47:33.110Z",
+      "feature": "engines",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T00:48:11.275Z",
+      "feature": "engines",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-03T00:48:24.341Z",
+      "feature": "engines",
       "phase": "do",
       "action": "updated"
     }

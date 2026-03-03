@@ -94,6 +94,8 @@ async def run_scan(
 
         file_records: dict[str, File] = {}
         pending_new: list[File] = []
+        # mtime/size가 변경된 파일만 재분류 대상으로 표시
+        dirty_files: set[str] = set()
         for i, fpath in enumerate(file_paths):
             filename = os.path.basename(fpath)
             extension = os.path.splitext(filename)[1].lower()
@@ -101,12 +103,17 @@ async def run_scan(
 
             existing = db.query(File).filter(File.path == fpath).first()
             if existing:
+                # mtime 또는 size가 달라진 파일만 dirty 표시 → Stage 5에서 재분류
+                if existing.modified_at != meta["modified_at"] or existing.size != meta["size"]:
+                    dirty_files.add(fpath)
                 existing.filename = filename
                 existing.extension = extension
                 existing.size = meta["size"]
                 existing.modified_at = meta["modified_at"]
                 file_record = existing
             else:
+                # 신규 파일은 항상 분류 필요
+                dirty_files.add(fpath)
                 file_record = File(
                     path=fpath,
                     filename=filename,
@@ -184,6 +191,33 @@ async def run_scan(
             extension = os.path.splitext(filename)[1].lower()
             file_record = file_records[fpath]
             text = extracted_texts.get(fpath)
+
+            # 파일 내용 미변경 + 이전 분류 결과 존재 → 재분류 없이 결과 복사
+            if fpath not in dirty_files:
+                prev_cls = (
+                    db.query(Classification)
+                    .filter(
+                        Classification.file_id == file_record.id,
+                        Classification.is_manual == False,
+                    )
+                    .order_by(Classification.classified_at.desc())
+                    .first()
+                )
+                if prev_cls:
+                    db.add(Classification(
+                        file_id=file_record.id,
+                        scan_id=scan_id,
+                        category=prev_cls.category,
+                        tag=prev_cls.tag,
+                        tier_used=prev_cls.tier_used,
+                        confidence_score=prev_cls.confidence_score,
+                        is_manual=False,
+                    ))
+                    if (i + 1) % BATCH_SIZE == 0 or i == total - 1:
+                        db.commit()
+                    yield {"stage": 5, "message": "분류 엔진 처리 중", "total": total, "completed": i + 1, "current_file": filename}
+                    await asyncio.sleep(0)
+                    continue
 
             manual_cls = (
                 db.query(Classification)

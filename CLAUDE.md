@@ -14,23 +14,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
-### Backend
-
-```bash
-cd backend
-source venv/bin/activate
-python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
-```
-
-First run downloads the sentence-transformers model (~500MB) automatically.
-
-### Frontend (Electron + React)
+### Run (Frontend only — backend auto-starts)
 
 ```bash
 cd frontend
-npm install
-npm run dev:electron   # Vite dev server (5173) + Electron app
+npm install          # first time only
+npm run dev:electron # Vite dev server (5173) + Electron + backend
 ```
+
+Electron's `main.cjs` automatically spawns the backend (`backend/venv/bin/python -m uvicorn`) on startup, polls `GET /docs` until ready, then opens the window. No need to start the backend separately.
+
+### First-time backend setup (venv 없을 때만)
+
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+First run downloads the sentence-transformers model (~500MB) automatically.
 
 ### Kill lingering dev processes
 
@@ -70,22 +73,24 @@ Electron Shell (main.cjs)
 
 ```
 Tier 1 — Rule-based (always runs)
-  confidence ≥ 0.80 → return result
-  otherwise → Tier 2
+  Sources: manual classifications (confidence=1.0) → user rules (0.85)
+           → custom extensions (0.70) → filename patterns (0.82)
+  Result kept as candidate; always compared with Tier 2
 
 Tier 2 — sentence-transformers embedding + cosine similarity
   model: paraphrase-multilingual-MiniLM-L12-v2
-  confidence ≥ 0.50 → return result
-  T1 + T2 agree on category → ensemble boost (+0.10, capped at 1.0)
-  confidence < 0.50 + API key present → Tier 3
+  Always runs when extracted text is available
+  T1 + T2 agree on category → ensemble: avg(T1, T2) + 0.10, capped at 1.0
+  Best of T1/T2 selected as candidate
 
-Tier 3 — OpenAI API (optional, user must supply key)
-  Use only when T3 beats max(T1, T2) score
+Tier 3 — OpenAI API or Gemini API (optional, user must supply key)
+  Runs whenever an API key is present
+  Replaces candidate only when T3 confidence > max(T1, T2) score
 
 Unclassified: confidence_score < 0.31 → isolated, excluded from file moves
 ```
 
-Cover page detection: PDF/DOCX first-page text (< 300 chars + date/student-ID pattern) is extracted separately and stored in `cover_pages`. Files with cover embedding cosine similarity ≥ 0.75 are auto-grouped under the same tag.
+Cover page detection: PDF/DOCX first-page text (< 300 chars + date/student-ID pattern) is extracted separately and stored in `cover_pages`. Files with cover embedding cosine similarity ≥ 0.80 are auto-grouped under the same tag.
 
 ### Frontend State Management
 
@@ -127,7 +132,7 @@ Never use `createRequire` to call `require('electron')` — it bypasses Electron
 
 - **Location (macOS)**: `~/Library/Application Support/Clasp/clasp.db`
 - **ORM**: SQLAlchemy 2.0, WAL mode enabled
-- Key tables: `files`, `classifications` (with `tier_used`, `confidence_score`, `is_manual`), `cover_pages` (embedding stored as JSON text), `cover_similarity_groups`, `action_logs` (Undo support), `rules`, `custom_extensions`
+- Key tables: `files`, `classifications` (with `tier_used`, `confidence_score`, `is_manual`), `cover_pages` (embedding stored as JSON text), `cover_similarity_groups`, `action_logs` (Undo support), `action_batches` (Undo batch grouping), `rules`, `custom_extensions`, `custom_categories`
 
 Manual classification (`is_manual=true`, `confidence_score=1.0`) takes priority in the next scan's Tier 1 lookup. It also triggers `tier2_embedding.apply_feedback()` for online embedding correction (learning_rate=0.05).
 

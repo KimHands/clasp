@@ -105,7 +105,7 @@ Tier 3 — 클라우드 LLM (선택적, API 키 필요)
 │  │  └────┬─────┘ └──────────┘ └───────────┘  │   │
 │  │       │  API 호출 (axios)                  │   │
 │  └───────┼───────────────────────────────────┘   │
-│          │  IPC (preload.js)                     │
+│          │  IPC (preload.cjs)                    │
 └──────────┼───────────────────────────────────────┘
            │  HTTP (localhost:8000)
 ┌──────────▼───────────────────────────────────────┐
@@ -175,10 +175,17 @@ Tier 3 — 클라우드 LLM (선택적, API 키 필요)
 
 ```
 Clasp/
+├── docs/                            # 프로젝트 문서
+│   ├── API_명세서.md                # REST API 엔드포인트 상세 명세
+│   ├── Calf.md                      # 발표 참고 자료
+│   ├── DEBUGGING.md                 # 디버깅 기록
+│   ├── Feedback.md                  # 피드백 기록
+│   ├── 요구사항_명세서.md           # 기능/비기능 요구사항 및 Use Case
+│   └── data-flow.md                 # 데이터 흐름 문서
 ├── frontend/                        # Electron + React 프론트엔드
 │   ├── electron/
-│   │   ├── main.js                  # Electron 메인 프로세스 (백엔드 자동 시작, IPC)
-│   │   └── preload.js               # IPC 브릿지 (폴더 선택, API Key 관리)
+│   │   ├── main.cjs                 # Electron 메인 프로세스 (백엔드 자동 시작, IPC)
+│   │   └── preload.cjs              # IPC 브릿지 (폴더 선택, API Key 관리)
 │   ├── src/
 │   │   ├── api/                     # FastAPI 호출 함수 (중앙화)
 │   │   │   ├── client.js            # Axios 인스턴스
@@ -239,8 +246,8 @@ Clasp/
 │   └── requirements.txt             # Python 의존성
 │
 ├── build.sh                         # 전체 빌드 스크립트
-├── 요구사항_명세서.md                # 기능/비기능 요구사항 및 Use Case
-└── API_명세서.md                    # REST API 엔드포인트 상세 명세
+├── README.md                        # 프로젝트 소개
+└── CLAUDE.md                        # Claude Code 가이드
 ```
 
 ---
@@ -296,7 +303,7 @@ custom_extensions (id, extension, category)
 | `POST` | `/undo` | 되돌리기 |
 | `GET` | `/apply/history` | 폴더별 정리 적용 이력 조회 |
 
-> 자세한 요청/응답 형식은 [API 명세서](./API_명세서.md)를 참고하세요.
+> 자세한 요청/응답 형식은 [API 명세서](./docs/API_명세서.md)를 참고하세요.
 
 ---
 
@@ -428,8 +435,8 @@ chmod +x build.sh
 
 ## 관련 문서
 
-- [요구사항 명세서](./요구사항_명세서.md) — 기능/비기능 요구사항, Use Case 정의
-- [API 명세서](./API_명세서.md) — REST API 엔드포인트 상세 명세
+- [요구사항 명세서](./docs/요구사항_명세서.md) — 기능/비기능 요구사항, Use Case 정의
+- [API 명세서](./docs/API_명세서.md) — REST API 엔드포인트 상세 명세
 
 ---
 
