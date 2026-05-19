@@ -2,6 +2,21 @@
 
 > 로컬 파일을 자동으로 분류하고, 분류 결과를 마인드맵으로 시각화하는 **프라이버시 우선** 데스크톱 애플리케이션
 
+[![Electron](https://img.shields.io/badge/Electron-40-47848F?logo=electron&logoColor=white)](https://www.electronjs.org)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev)
+[![Vite](https://img.shields.io/badge/Vite-7-646CFF?logo=vite&logoColor=white)](https://vitejs.dev)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-4-38B2AC?logo=tailwind-css&logoColor=white)](https://tailwindcss.com)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)](https://www.python.org)
+[![SQLite](https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org)
+[![OpenAI](https://img.shields.io/badge/OpenAI-412991?logo=openai&logoColor=white)](https://openai.com)
+
+| 항목 | 내용 |
+|---|---|
+| 형태 | Electron 데스크톱 앱 (macOS arm64/x64 · Windows x64) |
+| 핵심 가치 | 프라이버시 우선 — 모든 처리는 로컬에서, 파일 원문 외부 전송 금지 |
+| 본인 담당 | 풀스택 (Electron 셸 · React UI · FastAPI 백엔드 · 3단계 분류 엔진 · 배포 빌드) |
+
 ---
 
 ## 프로젝트 소개
@@ -94,33 +109,30 @@ Tier 3 — 클라우드 LLM (선택적, API 키 필요)
 
 ### 아키텍처 개요
 
-```
-┌─────────────────────────────────────────────────┐
-│                  Electron Shell                  │
-│  ┌───────────────────────────────────────────┐   │
-│  │           React + Vite (Renderer)         │   │
-│  │  ┌─────────┐ ┌──────────┐ ┌───────────┐  │   │
-│  │  │ Zustand  │ │ shadcn/ui│ │ SVG 마인드│  │   │
-│  │  │  Store   │ │ Tailwind │ │    맵     │  │   │
-│  │  └────┬─────┘ └──────────┘ └───────────┘  │   │
-│  │       │  API 호출 (axios)                  │   │
-│  └───────┼───────────────────────────────────┘   │
-│          │  IPC (preload.cjs)                    │
-└──────────┼───────────────────────────────────────┘
-           │  HTTP (localhost:8000)
-┌──────────▼───────────────────────────────────────┐
-│              Python FastAPI Backend               │
-│  ┌──────────┐ ┌──────────────┐ ┌──────────────┐  │
-│  │ Routers  │ │   Services   │ │   Engines    │  │
-│  │ scan     │ │ scan_service │ │ tier1_rule   │  │
-│  │ files    │ │ classify_svc │ │ tier2_embed  │  │
-│  │ rules    │ │ cover_svc    │ │ tier3_llm    │  │
-│  │ apply    │ │ action_svc   │ │ pipeline     │  │
-│  └──────────┘ └──────────────┘ └──────────────┘  │
-│  ┌──────────────────────────────────────────────┐ │
-│  │  SQLite + SQLAlchemy ORM (clasp.db)          │ │
-│  └──────────────────────────────────────────────┘ │
-└───────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Electron["Electron Shell"]
+        direction TB
+        subgraph Renderer["React + Vite (Renderer)"]
+            Store[Zustand Store]
+            UI[shadcn/ui + Tailwind]
+            Map[SVG 마인드맵]
+        end
+        IPC[preload.cjs IPC 브릿지]
+        Renderer -->|axios| IPC
+    end
+
+    subgraph Backend["Python FastAPI Backend"]
+        direction TB
+        Routers["Routers<br/>scan · files · rules · apply"]
+        Services["Services<br/>scan · classify · cover · action"]
+        Engines["Engines<br/>tier1_rule · tier2_embedding · tier3_llm · pipeline"]
+        DB[("SQLite + SQLAlchemy<br/>clasp.db")]
+        Routers --> Services --> Engines
+        Services --> DB
+    end
+
+    IPC -->|HTTP localhost:8000| Routers
 ```
 
 ### Frontend
