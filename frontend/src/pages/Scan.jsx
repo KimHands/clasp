@@ -129,7 +129,7 @@ export default function Scan() {
           <div className="mb-6">
             <div className="flex justify-between items-center mb-2">
               <span className="text-sm font-medium text-[hsl(var(--foreground))]">
-                {isCompleted ? '스캔 완료' : isError ? '오류 발생' : progress.message || '준비 중...'}
+                {isCompleted ? '스캔 완료' : isError ? progress.message || '오류 발생' : progress.message || '준비 중...'}
               </span>
               <span className="text-sm text-[hsl(var(--muted-foreground))]">
                 {progress.total > 0 && `${progress.completed} / ${progress.total}`}

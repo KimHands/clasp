@@ -446,8 +446,10 @@ DELETE /rules/{rule_id}
 ### 6.1 정리 적용 미리보기
 
 ```
-GET /apply/preview?scan_id={scan_id}
+GET /apply/preview?scan_id={scan_id}&folder_path={folder_path}
 ```
+
+`folder_path`는 정리 기준 폴더다. 홈 아래 폴더만 허용하고, 대상 파일이 하나라도 이 폴더 밖이면 `PERMISSION_DENIED`로 거부한다. 심볼릭 링크와 스캔 후 바뀐 파일은 `excluded_files`로 센다.
 
 **Response**
 
@@ -497,14 +499,16 @@ POST /apply
 ```json
 {
   "scan_id": "scan_20250201_143022",
-  "conflict_resolution": "rename"
+  "conflict_resolution": "rename",
+  "folder_path": "/Users/홍길동/Documents"
 }
 ```
 
 | 필드 | 타입 | 필수 | 설명 |
 |---|---|---|---|
 | scan_id | string | ✅ | 스캔 ID |
-| conflict_resolution | string | ✅ | 충돌 처리: `overwrite` / `rename` / `skip` |
+| conflict_resolution | string | ✅ | 충돌 처리: `rename` / `skip`. 기존 파일을 덮어쓰는 옵션은 없다 |
+| folder_path | string | ✅ | 정리 기준 폴더. 미리보기와 같은 규칙으로 검증한다 |
 
 **Response**
 
@@ -523,7 +527,11 @@ POST /apply
 
 **예외**
 - `SCAN_NOT_FOUND`: 해당 스캔 ID 없음
-- `MOVE_FAILED`: 일부 파일 이동 실패 (나머지 계속 진행)
+- `INVALID_TYPE`: 지원하지 않는 `conflict_resolution`
+- `PERMISSION_DENIED`: 허용 범위 밖의 폴더이거나 대상 파일이 폴더 밖에 있음
+- `MOVES_UNRESOLVED`: 조정하지 못한 파일 이동이 남아 있음
+
+파일별 이동 실패는 오류가 아니라 응답의 `failed`로 센다. 심볼릭 링크와 스캔 후 바뀐 파일은 옮기지 않고 `skipped`로 센다.
 
 ---
 
@@ -552,7 +560,7 @@ POST /undo
     "unrestorable": [
       {
         "filename": "deleted_file.pdf",
-        "reason": "original_path_not_found"
+        "reason": "destination_file_not_found"
       }
     ]
   },
@@ -560,9 +568,30 @@ POST /undo
 }
 ```
 
+| reason | 의미 |
+|---|---|
+| `destination_file_not_found` | 정리된 위치에 파일이 없음 |
+| `identity_mismatch` | 정리된 위치의 파일이 그때 옮긴 파일이 아님 |
+| `source_outside_root` | 원래 위치가 정리한 폴더 밖을 가리킴 |
+| `source_occupied` | 원래 위치를 다른 파일이나 파일 행이 쓰고 있음 |
+| `move_failed` | 이동 또는 기록 실패 |
+
+되돌리지 못한 항목은 같은 `action_log_id`로 다시 시도할 수 있다.
+
 **예외**
 - `LOG_NOT_FOUND`: 해당 로그 ID 없음
 - `ALREADY_UNDONE`: 이미 되돌리기 완료된 작업
+- `MOVES_UNRESOLVED`: 조정하지 못한 파일 이동이 남아 있음
+
+---
+
+### 6.4 정리 이력
+
+```
+GET /apply/history?folder_path={folder_path}
+```
+
+각 항목은 `action_log_id`, `scan_id`, `moved_count`, `skipped_count`, `failed_count`, `conflict_resolution`, `executed_at`, `is_undone`, `undo_state`를 담는다. `undo_state`는 `none`(되돌린 것 없음), `partial`(일부), `undone`(전체) 중 하나다.
 
 ---
 
@@ -577,6 +606,7 @@ POST /undo
 | NO_COVER_DATA | 404 | 표지 데이터 없음 |
 | RULE_CONFLICT | 409 | 중복 규칙 존재 |
 | INVALID_TYPE | 400 | 지원하지 않는 규칙 type |
+| MOVES_UNRESOLVED | 409 | 완료되지 않은 파일 이동을 먼저 확인해야 함 |
 | RULE_NOT_FOUND | 404 | 해당 규칙 ID 없음 |
 | SCAN_NOT_FOUND | 404 | 해당 스캔 ID 없음 |
 | MOVE_FAILED | 500 | 파일 이동 실패 |

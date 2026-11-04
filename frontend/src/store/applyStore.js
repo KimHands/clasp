@@ -13,13 +13,6 @@ const useApplyStore = create((set) => ({
   setUndoResult: (result) => set({ undoResult: result }),
   setActionHistory: (history) => set({ actionHistory: history }),
 
-  markHistoryUndone: (actionLogId) =>
-    set((state) => ({
-      actionHistory: state.actionHistory.map((h) =>
-        h.action_log_id === actionLogId ? { ...h, is_undone: true } : h
-      ),
-    })),
-
   reset: () => set({
     preview: null,
     lastActionLogId: null,

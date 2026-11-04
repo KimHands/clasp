@@ -13,11 +13,20 @@ import { getApplyPreview, applyOrganize, undoApply, getActionHistory } from '@/a
 
 const RESOLUTION_OPTIONS = [
   { value: 'rename', label: '이름 변경', desc: '파일명에 번호를 추가합니다 (report_1.pdf)' },
-  { value: 'overwrite', label: '덮어쓰기', desc: '기존 파일을 덮어씁니다' },
   { value: 'skip', label: '건너뛰기', desc: '충돌 파일은 이동하지 않습니다' },
 ]
 
 const RESOLUTION_LABELS = { rename: '이름 변경', overwrite: '덮어쓰기', skip: '건너뛰기' }
+
+const UNDO_REASON_LABELS = {
+  source_occupied: '원래 위치에 다른 파일이 있어 옮기지 않았습니다',
+  identity_mismatch: '정리된 위치의 파일이 그때 옮긴 파일이 아니어서 옮기지 않았습니다',
+  source_outside_root: '원래 위치가 정리한 폴더 밖을 가리켜 옮기지 않았습니다',
+  destination_file_not_found: '정리된 위치에서 파일을 찾을 수 없습니다',
+  move_failed: '파일을 옮기지 못했습니다',
+}
+
+const UNDO_STATE_BADGES = { partial: '일부 되돌림', undone: '되돌림' }
 
 function formatDate(isoString) {
   if (!isoString) return ''
@@ -210,7 +219,7 @@ function HistoryTimeline({ history, onUndo, undoingId }) {
               {/* 타임라인 도트 + 선 */}
               <div className="flex flex-col items-center shrink-0 pt-0.5">
                 <div className={`w-3 h-3 rounded-full border-2 ${
-                  batch.is_undone
+                  batch.undo_state === 'undone'
                     ? 'border-[hsl(var(--muted-foreground)/0.3)] bg-transparent'
                     : isFirst
                     ? 'border-[hsl(var(--primary))] bg-[hsl(var(--primary))]'
@@ -227,8 +236,10 @@ function HistoryTimeline({ history, onUndo, undoingId }) {
                   <span className="text-sm font-medium text-[hsl(var(--foreground))]">
                     {batch.moved_count}개 파일 이동
                   </span>
-                  {batch.is_undone && (
-                    <Badge variant="outline" className="text-[10px] py-0 px-1.5 opacity-60">되돌림</Badge>
+                  {UNDO_STATE_BADGES[batch.undo_state] && (
+                    <Badge variant="outline" className="text-[10px] py-0 px-1.5 opacity-60">
+                      {UNDO_STATE_BADGES[batch.undo_state]}
+                    </Badge>
                   )}
                   {batch.conflict_resolution && (
                     <Badge variant="secondary" className="text-[10px] py-0 px-1.5">
@@ -252,7 +263,7 @@ function HistoryTimeline({ history, onUndo, undoingId }) {
               </div>
 
               {/* Undo 버튼 */}
-              {!batch.is_undone && (
+              {batch.undo_state !== 'undone' && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -264,7 +275,7 @@ function HistoryTimeline({ history, onUndo, undoingId }) {
                     ? <Loader2 size={13} className="animate-spin" />
                     : <RotateCcw size={13} />
                   }
-                  되돌리기
+                  {batch.undo_state === 'partial' ? '다시 시도' : '되돌리기'}
                 </Button>
               )}
             </div>
@@ -281,7 +292,7 @@ export default function Apply() {
   const {
     preview, lastActionLogId, applyResult, undoResult, actionHistory,
     setPreview, setLastActionLogId, setApplyResult, setUndoResult,
-    setActionHistory, markHistoryUndone, reset,
+    setActionHistory, reset,
   } = useApplyStore()
 
   const [loading, setLoading] = useState(false)
@@ -300,7 +311,7 @@ export default function Apply() {
   const loadPreview = async () => {
     setLoading(true)
     try {
-      const data = await getApplyPreview(scanId)
+      const data = await getApplyPreview(scanId, selectedFolder)
       setPreview(data)
     } catch (e) {
       console.error(e)
@@ -342,7 +353,7 @@ export default function Apply() {
       setLastActionLogId(result.action_log_id)
       loadHistory()
     } catch (e) {
-      alert('정리 적용에 실패했습니다.')
+      alert(e.message || '정리 적용에 실패했습니다.')
     } finally {
       setApplying(false)
     }
@@ -352,11 +363,11 @@ export default function Apply() {
     setUndoingId(actionLogId)
     try {
       const result = await undoApply({ actionLogId })
-      markHistoryUndone(actionLogId)
+      setUndoResult(result)
       if (actionLogId === lastActionLogId) {
-        setUndoResult(result)
         setApplyResult(null)
       }
+      await loadHistory()
     } catch (e) {
       alert(e.message || '되돌리기에 실패했습니다.')
     } finally {
@@ -414,17 +425,19 @@ export default function Apply() {
           <div className="glass-card p-5 border-[hsl(var(--primary)/0.2)] bg-[hsl(var(--primary)/0.04)]">
             <div className="flex items-center gap-2 mb-2">
               <RotateCcw size={16} className="text-[hsl(var(--primary))]" />
-              <h2 className="font-semibold text-[hsl(var(--primary))]">되돌리기 완료</h2>
+              <h2 className="font-semibold text-[hsl(var(--primary))]">
+                {undoResult.failed > 0 ? '일부만 되돌렸습니다' : '되돌리기 완료'}
+              </h2>
             </div>
             <p className="text-sm text-[hsl(var(--foreground)/0.8)]">{undoResult.restored}개 파일이 원래 위치로 복원되었습니다.</p>
             {undoResult.unrestorable?.length > 0 && (
               <div className="mt-3">
-                <p className="text-xs font-semibold text-red-500 mb-1">복구 불가 항목</p>
+                <p className="text-xs font-semibold text-red-500 mb-1">되돌리지 못한 항목</p>
                 {undoResult.unrestorable.map((u, i) => (
                   <div key={i} className="flex items-center gap-2 text-xs text-red-500">
                     <FileX size={12} />
                     <span>{u.filename}</span>
-                    <span className="opacity-60">({u.reason})</span>
+                    <span className="opacity-60">{UNDO_REASON_LABELS[u.reason] || u.reason}</span>
                   </div>
                 ))}
               </div>

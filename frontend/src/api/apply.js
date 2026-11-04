@@ -1,7 +1,8 @@
 import { api } from './client'
 
-export async function getApplyPreview(scanId) {
-  return api.get(`/apply/preview?scan_id=${encodeURIComponent(scanId)}`)
+export async function getApplyPreview(scanId, folderPath) {
+  const query = `scan_id=${encodeURIComponent(scanId)}&folder_path=${encodeURIComponent(folderPath)}`
+  return api.get(`/apply/preview?${query}`)
 }
 
 export async function applyOrganize({ scanId, conflictResolution, folderPath }) {
