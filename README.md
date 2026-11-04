@@ -13,11 +13,12 @@
 ![SQLite](https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white)
 ![MCP](https://img.shields.io/badge/MCP-read--only-555555)
 ![License](https://img.shields.io/badge/License-MIT-black)
+[![CI](https://github.com/KimHands/clasp/actions/workflows/ci.yml/badge.svg)](https://github.com/KimHands/clasp/actions/workflows/ci.yml)
 
 </div>
 
 > [!IMPORTANT]
-> macOS(arm64)에서 빌드와 실행을 확인했습니다. 앱은 서명되지 않았고, Windows는 코드 분기만 있으며 실제 빌드로 확인하지 않았습니다.
+> macOS(arm64)에서 빌드와 실행을 확인했습니다. 앱은 서명되지 않았습니다. Windows는 CI에서 실패를 허용한 백엔드 테스트만 돌리며, 실제 빌드는 확인하지 않았습니다.
 > 분류 정확도 수치는 직접 만든 소규모 합성 데이터의 회귀 감시용입니다. [평가 기록](docs/evaluation.md)을 참고하세요.
 
 ---

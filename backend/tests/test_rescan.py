@@ -10,6 +10,7 @@ from services import scan_service
 
 
 def _scan(db, monkeypatch, folder, scan_id):
+    folder = os.path.normpath(folder)
     monkeypatch.setattr(scan_service, "SessionLocal", sessionmaker(bind=db.get_bind()))
 
     async def collect():

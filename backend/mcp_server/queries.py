@@ -3,10 +3,10 @@
 MCP 클라이언트는 클라우드 LLM일 수 있으므로 기본 응답에는 파일명, 태그, 본문, 절대 경로를 넣지 않는다.
 """
 import os
+import pathlib
 import re
 import sqlite3
 from contextlib import contextmanager
-from urllib.parse import quote
 
 from fastapi import HTTPException
 from sqlalchemy import create_engine
@@ -34,7 +34,9 @@ def _connect_readonly():
     path = _database_path()
     if not os.path.exists(path):
         raise ValueError("Clasp 데이터베이스가 없습니다. 앱에서 폴더를 먼저 스캔하세요")
-    connection = sqlite3.connect(f"file:{quote(path)}?mode=ro", uri=True, check_same_thread=False)
+    # as_uri() also handles Windows drive letters and backslashes
+    uri = f"{pathlib.Path(path).resolve().as_uri()}?mode=ro"
+    connection = sqlite3.connect(uri, uri=True, check_same_thread=False)
     connection.execute("PRAGMA query_only=ON")
     return connection
 

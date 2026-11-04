@@ -1,3 +1,4 @@
+import os
 import unicodedata
 
 from utils.paths import is_within, validate_folder_path
@@ -24,4 +25,4 @@ def test_validate_rejects_outside_home(home):
 
 
 def test_validate_returns_real_path_inside_home(home):
-    assert validate_folder_path(f"{home}/a/../b") == f"{home}/b"
+    assert validate_folder_path(f"{home}/a/../b") == os.path.normpath(f"{home}/b")

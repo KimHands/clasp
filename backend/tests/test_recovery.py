@@ -29,7 +29,7 @@ def _log(db, src, dst, inode, action_type="pending"):
 
 
 def _paths(home):
-    return f"{home}/a.txt", f"{home}/문서/a.txt"
+    return os.path.normpath(f"{home}/a.txt"), os.path.normpath(f"{home}/문서/a.txt")
 
 
 def test_pending_dest_match_source_gone_becomes_move(home, db):
@@ -246,7 +246,7 @@ def test_apply_after_finalize_failure_keeps_records_straight(home, db, monkeypat
 
     apply_organize(db, "scan_t", "rename", f"{home}/r")
 
-    assert db.query(File).filter_by(id=file.id).one().path == f"{home}/r/문서/a.txt"
+    assert db.query(File).filter_by(id=file.id).one().path == os.path.normpath(f"{home}/r/문서/a.txt")
     assert read(f"{home}/r/문서/a.txt") == "본문"
     assert read(f"{home}/r/a.txt") == "그 사이 새로 만든 파일"
 

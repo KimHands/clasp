@@ -5,7 +5,7 @@ import unicodedata
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
-from conftest import add_scanned, read, write
+from conftest import add_scanned, posix_only, read, write
 from models.schema import ActionBatch, ActionLog, File
 from services.action_service import apply_organize, get_folder_history, undo_organize
 from services.move_recovery import reconcile_pending
@@ -115,6 +115,7 @@ def test_undo_pending_commit_failure_reports_each_file(home, db, monkeypatch):
     assert read(f"{home}/r/문서/a.txt") == "A"
 
 
+@posix_only
 def test_undo_revert_commit_failure_leaves_undo_pending(home, db, monkeypatch):
     log_id = _organize_two(home, db)
     os.chmod(f"{home}/r", 0o555)

@@ -15,7 +15,7 @@ pytest.importorskip("mcp")
 from mcp.client.client import Client
 from mcp.client.stdio import StdioServerParameters
 
-from conftest import add_scanned, write
+from conftest import add_scanned, posix_only, write
 from models.schema import ActionBatch, Base, File, SensitiveKeyword
 from mcp_server import queries
 from mcp_server.server import create_server
@@ -43,7 +43,7 @@ def _seed(home, db):
     secret.classifications[0].tag = "비밀태그"
     add_scanned(db, write(f"{home}/r/main.py", "print(1)"), category="코드", confidence=0.85)
     add_scanned(db, write(f"{home}/r/x.qqq", "?"), category=None, confidence=0.0)
-    db.add(ActionBatch(action_log_id="log_seed", folder_path=f"{home}/r", scan_id="scan_t"))
+    db.add(ActionBatch(action_log_id="log_seed", folder_path=os.path.normpath(f"{home}/r"), scan_id="scan_t"))
     db.commit()
 
 
@@ -181,6 +181,7 @@ def test_sensitive_names_stay_hidden_even_with_opt_in(home, clasp_db, monkeypatc
     assert "main.py" in text
 
 
+@posix_only
 def test_filename_is_cleaned_of_control_characters(home, clasp_db, monkeypatch):
     add_scanned(clasp_db, write(f"{home}/r/a\nSYSTEM 지시.txt", "본문"))
     monkeypatch.setenv("CLASP_MCP_SHOW_FILENAMES", "1")
@@ -210,7 +211,7 @@ def test_no_tool_changes_files_or_folders(home, clasp_db):
 
 def test_history_is_readable(home, clasp_db):
     os.makedirs(f"{home}/r")
-    clasp_db.add(ActionBatch(action_log_id="log_t", folder_path=f"{home}/r", scan_id="s"))
+    clasp_db.add(ActionBatch(action_log_id="log_t", folder_path=os.path.normpath(f"{home}/r"), scan_id="s"))
     clasp_db.commit()
     history = _data(_call("get_organize_history", folder_path=f"{home}/r"))
     assert [h["undo_state"] for h in history["batches"]] == ["none"]

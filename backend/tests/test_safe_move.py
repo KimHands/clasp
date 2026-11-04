@@ -3,7 +3,7 @@ import os
 
 import pytest
 
-from conftest import read, write
+from conftest import posix_only, read, write
 from services import safe_move
 from services.safe_move import ConcurrentChange, move_no_clobber
 
@@ -25,6 +25,7 @@ def test_existing_destination_raises_and_changes_nothing(tmp_path):
     assert read(dst) == "기존 파일"
 
 
+@posix_only
 @pytest.mark.parametrize("code", [errno.ENOTSUP, errno.EPERM, errno.EXDEV])
 def test_link_failure_propagates_and_keeps_source(tmp_path, monkeypatch, code):
     src = write(tmp_path / "a.txt", "본문")
@@ -41,6 +42,7 @@ def test_link_failure_propagates_and_keeps_source(tmp_path, monkeypatch, code):
     assert not os.path.lexists(dst)
 
 
+@posix_only
 def test_source_replaced_after_link_is_kept(tmp_path, monkeypatch):
     src = write(tmp_path / "a.txt", "A")
     dst = str(tmp_path / "b.txt")
@@ -58,6 +60,7 @@ def test_source_replaced_after_link_is_kept(tmp_path, monkeypatch):
     assert read(dst) == "A"
 
 
+@posix_only
 def test_unlink_failure_removes_own_link(tmp_path, monkeypatch):
     src = write(tmp_path / "a.txt", "본문")
     dst = str(tmp_path / "b.txt")
@@ -75,6 +78,7 @@ def test_unlink_failure_removes_own_link(tmp_path, monkeypatch):
     assert not os.path.lexists(dst)
 
 
+@posix_only
 def test_cleanup_keeps_replaced_destination(tmp_path, monkeypatch):
     src = write(tmp_path / "a.txt", "A")
     dst = str(tmp_path / "b.txt")

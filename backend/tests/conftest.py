@@ -1,4 +1,5 @@
 import os
+import sys
 import tempfile
 
 # database.py creates the app data directory at import time, so HOME must be
@@ -15,7 +16,7 @@ from models.schema import Base, Classification, File
 
 
 def write(path, text) -> str:
-    path = str(path)
+    path = os.path.normpath(str(path))
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         f.write(text)
@@ -29,7 +30,7 @@ def read(path) -> str:
 
 def add_scanned(db, path, scan_id="scan_t", category="문서", confidence=0.7) -> File:
     """스캔이 남기는 File·Classification 행을 직접 만든다"""
-    path = str(path)
+    path = os.path.normpath(str(path))
     size = modified_at = None
     if os.path.lexists(path):
         stat = os.lstat(path)
@@ -55,6 +56,9 @@ def add_scanned(db, path, scan_id="scan_t", category="문서", confidence=0.7) -
     ))
     db.commit()
     return file
+
+
+posix_only = pytest.mark.skipif(sys.platform == "win32", reason="POSIX 이동 경로 전용")
 
 
 @pytest.fixture

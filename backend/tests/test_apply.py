@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 
-from conftest import add_scanned, read, write
+from conftest import add_scanned, posix_only, read, write
 from models.schema import ActionLog, File
 from services import action_service
 from services.action_service import apply_organize
@@ -37,7 +37,7 @@ def test_moves_file_and_updates_path(home, db):
     assert result["moved"] == 1
     assert read(f"{home}/r/문서/a.txt") == "본문"
     db.refresh(file)
-    assert file.path == f"{home}/r/문서/a.txt"
+    assert file.path == os.path.normpath(f"{home}/r/문서/a.txt")
     assert _log_types(db) == ["move"]
 
 
@@ -130,6 +130,7 @@ def test_symlink_folder_escape_fails_without_writing(home, db):
     assert read(f"{home}/r/a.txt") == "본문"
 
 
+@posix_only
 def test_hardlink_unsupported_reports_failure(home, db, monkeypatch):
     add_scanned(db, write(f"{home}/r/a.txt", "본문"))
 
@@ -212,7 +213,7 @@ def test_finalize_failure_keeps_pending(home, db, monkeypatch):
     assert result["failed"] == 1
     assert _log_types(db) == ["pending"]
     assert read(f"{home}/r/문서/a.txt") == "본문"
-    assert db.query(File).filter(File.id == file.id).one().path == f"{home}/r/a.txt"
+    assert db.query(File).filter(File.id == file.id).one().path == os.path.normpath(f"{home}/r/a.txt")
 
 
 def test_cannot_lose_content(home, db):
