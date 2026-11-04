@@ -50,7 +50,10 @@ async def list_files(
 ):
     """UC-03: 분류 결과 목록 조회 (페이지네이션 + 필터)"""
 
-    from sqlalchemy import func
+    from sqlalchemy import and_, func, or_
+
+    # 수동 분류는 만들어진 스캔과 무관하게 이 스캔의 파일이면 우선 적용된다
+    files_in_scan = db.query(Classification.file_id).filter(Classification.scan_id == scan_id)
 
     # 파일별 최우선 분류를 서브쿼리로 처리 (수동 > 최신 자동)
     rank_subq = (
@@ -62,7 +65,10 @@ async def list_files(
                 order_by=(Classification.is_manual.desc(), Classification.classified_at.desc()),
             ).label("rn"),
         )
-        .filter(Classification.scan_id == scan_id)
+        .filter(or_(
+            Classification.scan_id == scan_id,
+            and_(Classification.is_manual == True, Classification.file_id.in_(files_in_scan)),
+        ))
         .subquery()
     )
 

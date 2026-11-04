@@ -10,6 +10,9 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 logger = logging.getLogger(__name__)
 
+os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+_MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
+
 # 카테고리별 대표 키워드 (임베딩 비교 기준) — Tier 1 카테고리 체계와 통일
 CATEGORY_KEYWORDS = {
     "문서": [
@@ -29,9 +32,8 @@ CATEGORY_KEYWORDS = {
     ],
     "코드": [
         "프로그래밍", "programming", "코드", "함수", "클래스",
-        "알고리즘", "algorithm", "보안", "security", "데이터베이스",
-        "database", "네트워크", "network", "머신러닝", "machine learning",
-        "운영체제", "OS", "소스코드", "개발", "구현",
+        "알고리즘 구현", "소스코드", "구현", "리팩터링", "변수",
+        "컴파일", "디버깅", "스크립트", "source code", "function",
     ],
     "데이터": [
         "데이터", "data", "분석", "CSV", "JSON", "XML",
@@ -162,7 +164,11 @@ def _get_model():
     global _model
     if _model is None:
         from sentence_transformers import SentenceTransformer
-        _model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+        # 받아 둔 모델이 있으면 네트워크를 쓰지 않는다. 없을 때만 내려받는다
+        try:
+            _model = SentenceTransformer(_MODEL_NAME, local_files_only=True)
+        except OSError:
+            _model = SentenceTransformer(_MODEL_NAME)
     return _model
 
 

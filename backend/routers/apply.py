@@ -15,7 +15,7 @@ from services.action_service import (
 
 router = APIRouter(tags=["apply"])
 
-VALID_RESOLUTIONS = {"overwrite", "rename", "skip"}
+VALID_RESOLUTIONS = {"rename", "skip"}
 
 
 class ApplyRequest(BaseModel):
@@ -29,9 +29,13 @@ class UndoRequest(BaseModel):
 
 
 @router.get("/apply/preview")
-async def preview(scan_id: str = Query(...), db: Session = Depends(get_db)):
+async def preview(
+    scan_id: str = Query(...),
+    folder_path: str = Query(...),
+    db: Session = Depends(get_db),
+):
     """UC-06: 정리 적용 미리보기"""
-    result = build_preview(db, scan_id)
+    result = build_preview(db, scan_id, folder_path)
     return JSONResponse(content=ok(result))
 
 
@@ -41,7 +45,7 @@ async def apply(body: ApplyRequest, db: Session = Depends(get_db)):
     if body.conflict_resolution not in VALID_RESOLUTIONS:
         raise_error(
             ErrorCode.INVALID_TYPE,
-            f"conflict_resolution은 overwrite/rename/skip 중 하나여야 합니다",
+            "conflict_resolution은 rename/skip 중 하나여야 합니다",
         )
     result = apply_organize(
         db,

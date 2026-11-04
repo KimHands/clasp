@@ -63,15 +63,29 @@ _EXT_CATEGORY_MAP = {
 # 파일명에서 연도 추출 패턴
 _YEAR_PATTERN = re.compile(r"(20\d{2}|19\d{2})")
 
-# 파일명 키워드 → 카테고리 패턴 (확장자 매핑보다 우선 적용, confidence 0.82 반환)
+# 확장자만으로 용도를 알 수 없는 범용 형식 — 내용 분석이 뒤집을 수 있도록 약한 근거로 둔다
+_GENERAL_FORMATS = {"pdf", "docx", "doc", "txt", "md", "hwp", "rtf"}
+FORMAT_CONFIDENCE = 0.85
+CONTAINER_CONFIDENCE = 0.50
+
+
+def _keywords(*words: str) -> re.Pattern:
+    # English keywords must stand alone: "paper" should not match "wallpaper"
+    alternatives = "|".join(
+        rf"(?<![a-z]){word}(?![a-z])" if word.isascii() else word for word in words
+    )
+    return re.compile(alternatives, re.I)
+
+
+# 파일명 키워드 → 카테고리 패턴 (범용 형식에만 적용, confidence 0.82 반환)
 _FILENAME_PATTERNS = [
-    (re.compile(r"(과제|레포트|report|assignment)", re.I), "문서"),
-    (re.compile(r"(발표|presentation|슬라이드)", re.I), "프레젠테이션"),
-    (re.compile(r"(회의록|minutes|meeting)", re.I), "문서"),
-    (re.compile(r"(기획서|proposal|계획서|사업계획)", re.I), "문서"),
-    (re.compile(r"(계약서|contract|협약)", re.I), "문서"),
-    (re.compile(r"(논문|thesis|dissertation|paper)", re.I), "문서"),
-    (re.compile(r"(매뉴얼|manual|지침서|가이드|guide)", re.I), "문서"),
+    (_keywords("과제", "레포트", "report", "assignment"), "문서"),
+    (_keywords("발표", "presentation", "슬라이드"), "프레젠테이션"),
+    (_keywords("회의록", "minutes", "meeting"), "문서"),
+    (_keywords("기획서", "proposal", "계획서", "사업계획"), "문서"),
+    (_keywords("계약서", "contract", "협약"), "문서"),
+    (_keywords("논문", "thesis", "dissertation", "paper"), "문서"),
+    (_keywords("매뉴얼", "manual", "지침서", "가이드", "guide"), "문서"),
 ]
 
 
@@ -112,36 +126,25 @@ def run(
                 "confidence_score": 0.85,
             }
 
-    # 파일명 키워드 패턴 매칭 (확장자 매핑보다 우선)
-    filename_no_ext = os.path.splitext(filename)[0]
-    for pattern, matched_category in _FILENAME_PATTERNS:
-        if pattern.search(filename_no_ext):
-            year_match = _YEAR_PATTERN.search(filename)
-            tag = f"{matched_category}_{year_match.group()}" if year_match else None
-            return {
-                "category": matched_category,
-                "tag": tag,
-                "confidence_score": 0.82,
-            }
-
-    # 확장자 매핑 (기본 + 사용자 커스텀)
+    year_match = _YEAR_PATTERN.search(filename)
     ext_lower = extension.lstrip(".").lower()
-    custom_exts = {
-        row.extension: row.category
-        for row in db.query(CustomExtension).all()
-    }
+    custom_exts = {row.extension: row.category for row in db.query(CustomExtension).all()}
     merged_ext_map = {**_EXT_CATEGORY_MAP, **custom_exts}
 
-    if ext_lower in merged_ext_map:
-        category = merged_ext_map[ext_lower]
-        # 파일명에서 연도 추출해 태그 생성
-        year_match = _YEAR_PATTERN.search(filename)
+    def result(category: str, confidence: float) -> dict:
         tag = f"{category}_{year_match.group()}" if year_match else None
-        return {
-            "category": category,
-            "tag": tag,
-            "confidence_score": 0.70,
-        }
+        return {"category": category, "tag": tag, "confidence_score": confidence}
+
+    # 형식이 분명한 확장자는 파일명보다 믿을 만하다
+    if ext_lower in merged_ext_map and ext_lower not in _GENERAL_FORMATS:
+        return result(merged_ext_map[ext_lower], FORMAT_CONFIDENCE)
+
+    if ext_lower in _GENERAL_FORMATS:
+        filename_no_ext = os.path.splitext(filename)[0]
+        for pattern, matched_category in _FILENAME_PATTERNS:
+            if pattern.search(filename_no_ext):
+                return result(matched_category, 0.82)
+        return result(merged_ext_map[ext_lower], CONTAINER_CONFIDENCE)
 
     return {
         "category": None,

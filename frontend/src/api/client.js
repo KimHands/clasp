@@ -1,9 +1,15 @@
-const BASE_URL = 'http://localhost:8000'
+let backendConfig = null
+
+export async function getBackendConfig() {
+  backendConfig ??= window.electronAPI.getBackendConfig()
+  return backendConfig
+}
 
 async function request(method, path, body = null) {
+  const { baseUrl, token } = await getBackendConfig()
   const options = {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'X-Clasp-Token': token },
   }
   if (body) {
     options.body = JSON.stringify(body)
@@ -11,8 +17,8 @@ async function request(method, path, body = null) {
 
   let res
   try {
-    res = await fetch(`${BASE_URL}${path}`, options)
-  } catch (networkErr) {
+    res = await fetch(`${baseUrl}${path}`, options)
+  } catch {
     // 백엔드 미기동 또는 네트워크 단절 시 명확한 오류 메시지
     const err = new Error('백엔드 서버에 연결할 수 없습니다. 앱을 재시작해 주세요.')
     err.code = 'NETWORK_ERROR'
@@ -46,5 +52,3 @@ export const api = {
   patch: (path, body) => request('PATCH', path, body),
   delete: (path) => request('DELETE', path),
 }
-
-export { BASE_URL }

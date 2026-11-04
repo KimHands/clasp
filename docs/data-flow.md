@@ -36,7 +36,7 @@
      │                               │    pipeline.classify()              │
      │                               │      → Tier1(규칙)                  │
      │                               │      → Tier2(임베딩)  (이미 뽑은 텍스트만 사용)
-     │                               │      → Tier3(LLM, 선택)             │
+     │                               │      → Tier3(로컬 LLM, 선택)             │
      │                               │    Classification 저장 ────────────►│ classifications
      │                               │         │                          │
      │                               │         ▼ Stage 6: 유사도           │

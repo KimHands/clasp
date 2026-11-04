@@ -1,0 +1,17 @@
+{
+  "split": "tune",
+  "llm_model": null,
+  "total": 24,
+  "correct": 22,
+  "accuracy": 0.917,
+  "confident_wrong": 0,
+  "confident": 15,
+  "by_tier": {
+    "1": 18,
+    "2": 6
+  },
+  "errors": [
+    "keynote_export.pdf: 기대 프레젠테이션, 결과 문서 (T1, 0.5)",
+    "코드메모.md: 기대 코드, 결과 문서 (T1, 0.5)"
+  ]
+}

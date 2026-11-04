@@ -95,6 +95,30 @@ class ActionLog(Base):
     is_undone = Column(Boolean, default=False, nullable=False)
 
     batch = relationship("ActionBatch", back_populates="logs")
+    identity = relationship("ActionLogIdentity", uselist=False, cascade="all, delete-orphan")
+
+
+class ActionLogIdentity(Base):
+    """이동한 파일의 식별값 — 복구와 되돌리기에서 같은 파일인지 확인"""
+    __tablename__ = "action_log_identities"
+
+    log_id = Column(Integer, ForeignKey("action_logs.id"), primary_key=True)
+    inode = Column(String, nullable=False)
+
+
+class AppSetting(Base):
+    __tablename__ = "app_settings"
+
+    key = Column(String, primary_key=True)
+    value = Column(String, nullable=False)
+
+
+class SensitiveKeyword(Base):
+    """파일명에 포함되면 내용을 읽지 않는 키워드"""
+    __tablename__ = "sensitive_keywords"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    keyword = Column(String, nullable=False, unique=True)
 
 
 class Rule(Base):

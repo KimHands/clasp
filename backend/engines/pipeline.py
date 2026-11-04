@@ -1,7 +1,8 @@
 import asyncio
 from sqlalchemy.orm import Session
 from typing import Optional
-from engines import tier1_rule, tier2_embedding, tier3_llm
+from engines import tier1_rule, tier2_embedding
+from engines.tier3_llm import Tier3Session
 from engines.tier2_embedding import infer_tag
 
 # 텍스트 추출이 불가능한 확장자 — 텍스트 없으면 Tier 1만 사용
@@ -14,6 +15,11 @@ _NON_TEXT_EXTENSIONS = {
 UNCLASSIFIED_THRESHOLD = 0.31
 # T3 API 호출을 skip할 신뢰도 기준 — T1/T2가 이 이상이면 LLM 불필요
 _T3_SKIP_THRESHOLD = 0.85
+# 수동 분류(1.0)보다 항상 낮게 유지한다
+_AGREEMENT_BONUS = 0.05
+_AGREEMENT_MAX = 0.95
+# 분류 방식을 바꾸면 올린다. 변경 없는 파일도 다음 스캔에서 다시 분류된다
+CLASSIFIER_VERSION = 2
 
 
 async def classify(
@@ -24,11 +30,11 @@ async def classify(
     db: Session,
     manual_category: Optional[str] = None,
     cover_text: Optional[str] = None,
-    custom_category_names: list[str] | None = None,
+    tier3: Optional[Tier3Session] = None,
 ) -> dict:
     """
     Tier 1 → (수동 분류면 즉시 반환) → Tier 2 → best 선정
-    → (신뢰도 낮고 API Key 있으면) Tier 3.
+    → (신뢰도 낮고 로컬 LLM이 켜져 있으면) Tier 3.
     cover_text: 표지 탐지 결과 — 카테고리 분류는 본문 우선, 태그 추론은 표지 우선
     반환: { category, tag, tier_used, confidence_score }
     """
@@ -66,7 +72,10 @@ async def classify(
 
     # T1 + T2 결과 조합 → best 선정
     if t1["category"] and t2["category"] and t1["category"] == t2["category"]:
-        boosted_score = min(1.0, (t1["confidence_score"] + t2["confidence_score"]) / 2 + 0.10)
+        boosted_score = min(
+            _AGREEMENT_MAX,
+            max(t1["confidence_score"], t2["confidence_score"]) + _AGREEMENT_BONUS,
+        )
         content_tag = infer_tag(tag_source, t1["category"])
         best = {
             "category": t1["category"],
@@ -90,9 +99,9 @@ async def classify(
             content_tag = infer_tag(tag_source, t2["category"])
         best = {**t1, "tag": content_tag or t1["tag"], "tier_used": 1}
 
-    # ── Tier 3: 클라우드 LLM (API Key 있고 신뢰도가 낮을 때만 실행) ──
-    if tier3_llm.is_available() and best["confidence_score"] < _T3_SKIP_THRESHOLD:
-        t3 = await tier3_llm.run(t2_input, filename, extra_categories=custom_category_names)
+    # ── Tier 3: 로컬 LLM (켜져 있고 신뢰도가 낮을 때만 실행) ──
+    if tier3 and tier3.available and best["confidence_score"] < _T3_SKIP_THRESHOLD:
+        t3 = await tier3.classify(t2_input, filename)
         if t3.get("category") and t3["confidence_score"] > best["confidence_score"]:
             if not t3.get("tag"):
                 t3["tag"] = infer_tag(tag_source, t3["category"])

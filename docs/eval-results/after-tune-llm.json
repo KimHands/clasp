@@ -1,0 +1,17 @@
+{
+  "split": "tune",
+  "llm_model": "qwen/qwen2.5-coder-7b",
+  "total": 24,
+  "correct": 23,
+  "accuracy": 0.958,
+  "confident_wrong": 1,
+  "confident": 23,
+  "by_tier": {
+    "3": 11,
+    "2": 5,
+    "1": 8
+  },
+  "errors": [
+    "wallpaper_collection.pdf: 기대 문서, 결과 프레젠테이션 (T3, 0.8)"
+  ]
+}

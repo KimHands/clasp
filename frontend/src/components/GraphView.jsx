@@ -4,7 +4,7 @@ import {
   Image, Video, Music, Archive, HelpCircle, Tag,
   AlertTriangle, File, RotateCcw, Maximize2,
 } from 'lucide-react'
-import { buildMindmapTree } from '@/graph/cytoscapeConfig'
+import { buildMindmapTree } from '@/graph/mindmapTree'
 import useThemeStore from '@/store/themeStore'
 
 const ICON_MAP = {
@@ -340,6 +340,7 @@ export default function GraphView({ files, folderName, onNodeClick }) {
     }
     walk(tree)
     if (ids.size > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 새 트리가 오면 기본 접기 상태로 되돌린다
       setCollapsed(ids)
       initialCollapseApplied.current = true
     }
@@ -359,6 +360,8 @@ export default function GraphView({ files, folderName, onNodeClick }) {
     nodes.forEach((n) => { if (n.y + n.h > max) max = n.y + n.h })
     return max + 80
   }, [nodes])
+
+  const autoFitRef = useRef(true)
 
   // ref → DOM 직접 transform 적용 (리렌더 없음)
   const applyTransform = useCallback(() => {
@@ -398,7 +401,11 @@ export default function GraphView({ files, folderName, onNodeClick }) {
     if (!ds.active) return
     ds.active = false
     if (ds.pointerId != null) {
-      try { containerRef.current?.releasePointerCapture(ds.pointerId) } catch {}
+      try {
+        containerRef.current?.releasePointerCapture(ds.pointerId)
+      } catch {
+        // The pointer may already be released when the capture is lost
+      }
       ds.pointerId = null
     }
     if (svgRef.current) svgRef.current.style.cursor = 'grab'
@@ -436,6 +443,7 @@ export default function GraphView({ files, folderName, onNodeClick }) {
 
   // ── 컨트롤 ────────────────────────────────────────────────────────────────
   const handleToggle = useCallback((nodeId) => {
+    autoFitRef.current = false
     setCollapsed((prev) => {
       const next = new Set(prev)
       if (next.has(nodeId)) next.delete(nodeId)
@@ -451,10 +459,14 @@ export default function GraphView({ files, folderName, onNodeClick }) {
       node.children?.forEach(walk)
     }
     walk(tree)
+    autoFitRef.current = false
     setCollapsed(ids)
   }, [tree])
 
-  const expandAll = useCallback(() => setCollapsed(new Set()), [])
+  const expandAll = useCallback(() => {
+    autoFitRef.current = false
+    setCollapsed(new Set())
+  }, [])
 
   const fitView = useCallback(() => {
     if (!containerRef.current) return
@@ -464,13 +476,19 @@ export default function GraphView({ files, folderName, onNodeClick }) {
     const scaleY = (ch - 60) / totalHeight
     const s = Math.min(scaleX, scaleY, 1.2)
     zoomRef.current = Math.max(0.3, Math.min(s, 2))
-    panRef.current = { x: 30, y: 30 }
+    panRef.current = { x: 30, y: Math.max(30, (ch - totalHeight * zoomRef.current) / 2) }
     applyTransform()
   }, [totalWidth, totalHeight, applyTransform])
 
+  // 새 결과가 오면 맞춤을 다시 켠다. 기본 접기가 적용된 뒤의 크기로 맞추기 위해 크기가 바뀔 때도 실행한다
   useEffect(() => {
+    autoFitRef.current = true
     fitView()
   }, [files])
+
+  useEffect(() => {
+    if (autoFitRef.current) fitView()
+  }, [fitView])
 
   const shadowColor = isDark ? '#000000' : '#64748B'
   const shadowOpacity = isDark ? 0.3 : 0.08
@@ -527,7 +545,6 @@ export default function GraphView({ files, folderName, onNodeClick }) {
         </defs>
         <g
           ref={svgGroupRef}
-          transform={`translate(${panRef.current.x},${panRef.current.y}) scale(${zoomRef.current})`}
         >
           {edges.map((edge, i) => (
             <CurvePath key={i} {...edge} />

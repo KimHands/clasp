@@ -22,7 +22,6 @@ export default function Scan() {
 
   const {
     selectedFolder,
-    scanId,
     scanStatus,
     progress,
     setScanId,
@@ -34,21 +33,6 @@ export default function Scan() {
   const { reset: resetFiles } = useFileStore()
 
   const startedRef = useRef(false)
-
-  // 페이지 진입 시 자동 스캔 시작 (StrictMode 중복 실행 방지)
-  useEffect(() => {
-    if (!selectedFolder) {
-      navigate('/')
-      return
-    }
-    if (scanStatus === 'idle' && !startedRef.current) {
-      startedRef.current = true
-      handleStartScan()
-    }
-    return () => {
-      esRef.current?.close()
-    }
-  }, [])
 
   const handleStartScan = async () => {
     try {
@@ -74,14 +58,30 @@ export default function Scan() {
         () => {
           setScanStatus('completed')
         },
-        () => {
+        (err) => {
+          setProgress({ ...useScanStore.getState().progress, message: err.message })
           setScanStatus('error')
         }
       )
-    } catch (err) {
+    } catch {
       setScanStatus('error')
     }
   }
+
+  // 페이지 진입 시 자동 스캔 시작 (StrictMode 중복 실행 방지)
+  useEffect(() => {
+    if (!selectedFolder) {
+      navigate('/')
+      return
+    }
+    if (scanStatus === 'idle' && !startedRef.current) {
+      startedRef.current = true
+      handleStartScan()
+    }
+    return () => {
+      esRef.current?.close()
+    }
+  }, [])
 
   const handleGoResult = () => {
     navigate('/result')
@@ -129,7 +129,7 @@ export default function Scan() {
           <div className="mb-6">
             <div className="flex justify-between items-center mb-2">
               <span className="text-sm font-medium text-[hsl(var(--foreground))]">
-                {isCompleted ? '스캔 완료' : isError ? '오류 발생' : progress.message || '준비 중...'}
+                {isCompleted ? '스캔 완료' : isError ? progress.message || '오류 발생' : progress.message || '준비 중...'}
               </span>
               <span className="text-sm text-[hsl(var(--muted-foreground))]">
                 {progress.total > 0 && `${progress.completed} / ${progress.total}`}
@@ -159,7 +159,6 @@ export default function Scan() {
             {STAGES.map((stage) => {
               const isDone = currentStage > stage.id || isCompleted
               const isActive = currentStage === stage.id && isScanning
-              const isPending = currentStage < stage.id && !isCompleted
 
               return (
                 <div key={stage.id} className="flex items-center gap-3">

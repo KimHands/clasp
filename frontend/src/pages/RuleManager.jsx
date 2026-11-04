@@ -1,7 +1,7 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  DndContext, closestCenter, PointerSensor, useSensor, useSensors,
+  DndContext, PointerSensor, useSensor, useSensors,
   DragOverlay, useDroppable
 } from '@dnd-kit/core'
 import { useDraggable } from '@dnd-kit/core'
@@ -402,7 +402,7 @@ export default function RuleManager() {
     try {
       await deleteRule(ruleId)
       removeRule(ruleId)
-    } catch (e) {
+    } catch {
       alert('규칙 삭제에 실패했습니다')
     }
   }

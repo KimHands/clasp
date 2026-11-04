@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  ArrowLeft, Eye, EyeOff, Plus, X, Save, Key, ShieldAlert, FileType2, Trash2,
+  ArrowLeft, Plus, X, Save, Cpu, ShieldAlert, FileType2, Trash2,
   Sun, Moon, Monitor, CheckCircle2, XCircle, Tags
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import useExtensionStore from '@/store/extensionStore'
 import useThemeStore from '@/store/themeStore'
-import { getLlmStatus, setOpenaiApiKey as saveOpenaiKey, setGeminiApiKey as saveGeminiKey } from '@/api/settings'
-
-const STORAGE_KEY_KEYWORDS = 'clasp_sensitive_keywords'
+import {
+  getLocalLlm, saveLocalLlm, testLocalLlm,
+  getSensitiveKeywords, createSensitiveKeyword, deleteSensitiveKeyword,
+} from '@/api/settings'
 
 const THEME_OPTIONS = [
   { value: 'light', label: '라이트', icon: Sun },
@@ -21,19 +22,20 @@ const THEME_OPTIONS = [
 export default function Settings() {
   const navigate = useNavigate()
   const { mode, setTheme } = useThemeStore()
-  const [apiKey, setApiKey] = useState('')
-  const [showKey, setShowKey] = useState(false)
-  const [geminiApiKey, setGeminiApiKey] = useState('')
-  const [showGeminiKey, setShowGeminiKey] = useState(false)
+  const [llmEnabled, setLlmEnabled] = useState(false)
+  const [llmBaseUrl, setLlmBaseUrl] = useState('')
+  const [llmModel, setLlmModel] = useState('')
+  const [llmModels, setLlmModels] = useState([])
+  const [llmTest, setLlmTest] = useState(null)
   const [keywords, setKeywords] = useState([])
   const [newKeyword, setNewKeyword] = useState('')
+  const [keywordError, setKeywordError] = useState('')
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState('')
 
   const [newExt, setNewExt] = useState('')
   const [newExtCategory, setNewExtCategory] = useState('')
   const [extError, setExtError] = useState('')
-  const [llmStatus, setLlmStatus] = useState(null)
 
   const [newCatName, setNewCatName] = useState('')
   const [newCatKeywords, setNewCatKeywords] = useState('')
@@ -45,63 +47,57 @@ export default function Settings() {
     fetchCategories, addCategory, removeCategory,
   } = useExtensionStore()
 
-  const fetchLlmStatus = async () => {
-    try {
-      const data = await getLlmStatus()
-      setLlmStatus(data)
-    } catch (_) {
-      setLlmStatus(null)
-    }
-  }
-
   useEffect(() => {
-    window.electronAPI?.getEnv?.('OPENAI_API_KEY').then((key) => {
-      if (key) setApiKey(key)
-    })
-    window.electronAPI?.getEnv?.('GEMINI_API_KEY').then((key) => {
-      if (key) setGeminiApiKey(key)
-    })
-    const storedKeywords = JSON.parse(localStorage.getItem(STORAGE_KEY_KEYWORDS) || '[]')
-    setKeywords(storedKeywords)
+    getLocalLlm().then((config) => {
+      setLlmEnabled(config.enabled)
+      setLlmBaseUrl(config.base_url)
+      setLlmModel(config.model)
+    }).catch((e) => setSaveError(e.message))
+    getSensitiveKeywords().then((data) => setKeywords(data.keywords)).catch((e) => setKeywordError(e.message))
     fetchExtensions()
     fetchCategories()
-    fetchLlmStatus()
   }, [])
 
   const handleSave = async () => {
     setSaveError('')
     try {
-      await Promise.all([
-        saveOpenaiKey(apiKey),
-        saveGeminiKey(geminiApiKey),
-      ])
+      await saveLocalLlm({ enabled: llmEnabled, baseUrl: llmBaseUrl, model: llmModel })
     } catch (e) {
-      setSaveError('백엔드 API Key 전달 실패: ' + e.message)
+      setSaveError(e.message)
       return
     }
-    // Electron IPC — 앱 재시작 시에도 키 유지 (없으면 무시)
-    try {
-      await Promise.all([
-        window.electronAPI?.setEnv?.('OPENAI_API_KEY', apiKey),
-        window.electronAPI?.setEnv?.('GEMINI_API_KEY', geminiApiKey),
-      ])
-    } catch (_) { /* Electron IPC 없어도 백엔드에는 이미 전달됨 */ }
-    localStorage.setItem(STORAGE_KEY_KEYWORDS, JSON.stringify(keywords))
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
-    fetchLlmStatus()
   }
 
-  const handleAddKeyword = (e) => {
+  const handleTestLlm = async () => {
+    setLlmTest(null)
+    try {
+      const result = await testLocalLlm(llmBaseUrl)
+      setLlmModels(result.models)
+      setLlmTest(result.ok ? 'ok' : 'failed')
+    } catch (e) {
+      setLlmTest(e.message)
+    }
+  }
+
+  const handleAddKeyword = async (e) => {
     e.preventDefault()
+    setKeywordError('')
     const kw = newKeyword.trim()
-    if (!kw || keywords.includes(kw)) return
-    setKeywords([...keywords, kw])
-    setNewKeyword('')
+    if (!kw) return
+    try {
+      const created = await createSensitiveKeyword(kw)
+      setKeywords([...keywords, created])
+      setNewKeyword('')
+    } catch (err) {
+      setKeywordError(err.message)
+    }
   }
 
-  const handleRemoveKeyword = (kw) => {
-    setKeywords(keywords.filter((k) => k !== kw))
+  const handleRemoveKeyword = async (id) => {
+    await deleteSensitiveKeyword(id)
+    setKeywords(keywords.filter((k) => k.id !== id))
   }
 
   return (
@@ -146,97 +142,64 @@ export default function Settings() {
           </div>
         </section>
 
-        {/* LLM API Keys */}
-        <section className="glass-card p-6 space-y-5">
+        {/* 로컬 LLM */}
+        <section className="glass-card p-6 space-y-4">
           <div className="flex items-center gap-2 mb-1">
-            <Key size={16} className="text-[hsl(var(--muted-foreground))]" />
-            <h2 className="text-sm font-bold text-[hsl(var(--foreground))]">LLM API Key</h2>
+            <Cpu size={16} className="text-[hsl(var(--muted-foreground))]" />
+            <h2 className="text-sm font-bold text-[hsl(var(--foreground))]">로컬 LLM</h2>
             <Badge variant="secondary" className="text-xs">Tier 3 선택사항</Badge>
           </div>
           <p className="text-xs text-[hsl(var(--muted-foreground))]">
-            API Key를 입력하면 신뢰도가 낮은 파일에 대해 클라우드 LLM으로 추가 분류를 수행합니다.
-            파일 원문은 전송되지 않으며, 요약 텍스트만 사용됩니다.
-            두 키가 모두 등록된 경우 OpenAI가 우선 사용됩니다.
+            켜면 신뢰도가 낮은 파일의 파일명과 본문 앞부분을 이 컴퓨터의 LLM 서버로 보내 분류합니다.
+            LM Studio, Ollama처럼 OpenAI 호환 API를 제공하는 서버를 쓸 수 있으며, 외부 주소는 사용할 수 없습니다.
           </p>
 
-          {/* 백엔드 적용 상태 */}
-          {llmStatus && (
-            <div className="flex flex-col gap-1.5 p-3 rounded-lg bg-[var(--input-bg)] border border-[var(--glass-border)]">
-              <p className="text-xs font-semibold text-[hsl(var(--muted-foreground))] mb-1">백엔드 적용 상태</p>
-              <div className="flex items-center gap-2 text-xs">
-                {llmStatus.openai_configured ? (
-                  <CheckCircle2 size={13} className="text-emerald-500 shrink-0" />
-                ) : (
-                  <XCircle size={13} className="text-[hsl(var(--muted-foreground))] shrink-0" />
-                )}
-                <span className={llmStatus.openai_configured ? 'text-emerald-500' : 'text-[hsl(var(--muted-foreground))]'}>
-                  OpenAI: {llmStatus.openai_configured ? '등록됨' : '미등록'}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-xs">
-                {llmStatus.gemini_configured ? (
-                  <CheckCircle2 size={13} className="text-emerald-500 shrink-0" />
-                ) : (
-                  <XCircle size={13} className="text-[hsl(var(--muted-foreground))] shrink-0" />
-                )}
-                <span className={llmStatus.gemini_configured ? 'text-emerald-500' : 'text-[hsl(var(--muted-foreground))]'}>
-                  Gemini: {llmStatus.gemini_configured ? '등록됨' : '미등록'}
-                </span>
-              </div>
-              {llmStatus.active_provider && (
-                <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
-                  활성 프로바이더: <span className="font-semibold text-[hsl(var(--foreground))]">{llmStatus.active_provider === 'openai' ? 'OpenAI' : 'Gemini'}</span>
-                </p>
-              )}
-            </div>
-          )}
+          <label className="flex items-center gap-2 text-sm text-[hsl(var(--foreground))]">
+            <input
+              type="checkbox"
+              checked={llmEnabled}
+              onChange={(e) => setLlmEnabled(e.target.checked)}
+            />
+            로컬 LLM 사용
+          </label>
 
-          {/* OpenAI */}
           <div>
-            <p className="text-xs font-semibold text-[hsl(var(--foreground))] mb-2">OpenAI (GPT-4o-mini)</p>
-            <div className="relative">
+            <p className="text-xs font-semibold text-[hsl(var(--foreground))] mb-2">서버 주소</p>
+            <div className="flex gap-2">
               <input
-                type={showKey ? 'text' : 'password'}
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="sk-..."
-                className="w-full glass-input px-4 py-2.5 pr-10 text-sm font-mono"
+                type="text"
+                value={llmBaseUrl}
+                onChange={(e) => setLlmBaseUrl(e.target.value)}
+                placeholder="http://127.0.0.1:1234/v1"
+                className="flex-1 glass-input px-4 py-2.5 text-sm font-mono"
               />
-              <button
-                type="button"
-                onClick={() => setShowKey(!showKey)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors"
-              >
-                {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
+              <Button type="button" size="sm" variant="outline" onClick={handleTestLlm}>연결 시험</Button>
             </div>
-            {apiKey && (
-              <p className="text-xs text-emerald-500 mt-1.5">API Key가 입력되었습니다. 저장 후 적용됩니다.</p>
+            {llmTest === 'ok' && (
+              <p className="flex items-center gap-1.5 text-xs text-emerald-500 mt-1.5">
+                <CheckCircle2 size={13} /> 연결되었습니다. 모델 {llmModels.length}개를 찾았습니다.
+              </p>
+            )}
+            {llmTest && llmTest !== 'ok' && (
+              <p className="flex items-center gap-1.5 text-xs text-red-500 mt-1.5">
+                <XCircle size={13} /> {llmTest === 'failed' ? '서버에 연결할 수 없습니다.' : llmTest}
+              </p>
             )}
           </div>
 
-          {/* Gemini */}
           <div>
-            <p className="text-xs font-semibold text-[hsl(var(--foreground))] mb-2">Google Gemini (gemini-1.5-flash)</p>
-            <div className="relative">
-              <input
-                type={showGeminiKey ? 'text' : 'password'}
-                value={geminiApiKey}
-                onChange={(e) => setGeminiApiKey(e.target.value)}
-                placeholder="AIza..."
-                className="w-full glass-input px-4 py-2.5 pr-10 text-sm font-mono"
-              />
-              <button
-                type="button"
-                onClick={() => setShowGeminiKey(!showGeminiKey)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors"
-              >
-                {showGeminiKey ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-            {geminiApiKey && (
-              <p className="text-xs text-emerald-500 mt-1.5">API Key가 입력되었습니다. 저장 후 적용됩니다.</p>
-            )}
+            <p className="text-xs font-semibold text-[hsl(var(--foreground))] mb-2">모델</p>
+            <input
+              type="text"
+              list="local-llm-models"
+              value={llmModel}
+              onChange={(e) => setLlmModel(e.target.value)}
+              placeholder="연결 시험 후 선택하거나 직접 입력"
+              className="w-full glass-input px-4 py-2.5 text-sm font-mono"
+            />
+            <datalist id="local-llm-models">
+              {llmModels.map((model) => <option key={model} value={model} />)}
+            </datalist>
           </div>
         </section>
 
@@ -247,7 +210,7 @@ export default function Settings() {
             <h2 className="text-sm font-bold text-[hsl(var(--foreground))]">민감 파일 키워드</h2>
           </div>
           <p className="text-xs text-[hsl(var(--muted-foreground))] mb-4">
-            파일명에 아래 키워드가 포함된 파일은 내용 분석(Tier 2/3)에서 제외됩니다.
+            파일명에 아래 키워드가 포함된 파일은 내용을 읽지 않고 파일명과 확장자로만 분류합니다. 이미 저장된 내용은 다음 스캔 때 지웁니다.
           </p>
 
           <form onSubmit={handleAddKeyword} className="flex gap-2 mb-4">
@@ -262,16 +225,17 @@ export default function Settings() {
               <Plus size={14} /> 추가
             </Button>
           </form>
+          {keywordError && <p className="text-xs text-red-500 mb-3">{keywordError}</p>}
 
           {keywords.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {keywords.map((kw) => (
                 <span
-                  key={kw}
+                  key={kw.id}
                   className="flex items-center gap-1.5 bg-[var(--input-bg)] text-[hsl(var(--foreground)/0.8)] text-sm px-3 py-1 rounded-full border border-[var(--glass-border)]"
                 >
-                  {kw}
-                  <button onClick={() => handleRemoveKeyword(kw)} className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--destructive))] transition-colors">
+                  {kw.keyword}
+                  <button onClick={() => handleRemoveKeyword(kw.id)} className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--destructive))] transition-colors">
                     <X size={12} />
                   </button>
                 </span>

@@ -1,0 +1,15 @@
+{
+  "split": "holdout",
+  "llm_model": "qwen/qwen2.5-coder-7b",
+  "total": 14,
+  "correct": 14,
+  "accuracy": 1.0,
+  "confident_wrong": 0,
+  "confident": 13,
+  "by_tier": {
+    "3": 8,
+    "1": 5,
+    "2": 1
+  },
+  "errors": []
+}

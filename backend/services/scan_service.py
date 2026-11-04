@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import asyncio
@@ -7,12 +8,18 @@ from typing import AsyncGenerator
 from sqlalchemy.orm import Session
 
 from database import SessionLocal
-from models.schema import File, Classification, CoverSimilarityGroup, CustomCategory
+from models.schema import (
+    AppSetting, File, Classification, CoverSimilarityGroup, CustomCategory, CustomExtension, Rule,
+    SensitiveKeyword,
+)
+from utils.paths import canonical_path
 from utils.text_extractor import extract_text
 from utils.cover_detector import extract_cover_text
 from services.cover_service import save_cover, compute_similarity_groups
+from services.move_recovery import reconcile_pending
+from services.sensitive import is_sensitive, load_keywords, purge_stored_content
 from engines import pipeline
-from engines import tier2_embedding
+from engines import tier2_embedding, tier3_llm
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +53,47 @@ def _collect_files(folder_path: str) -> list[str]:
             ext = os.path.splitext(fname)[1].lower()
             if ext in EXCLUDED_EXTENSIONS:
                 continue
-            result.append(os.path.join(root, fname))
+            path = os.path.join(root, fname)
+            # 심볼릭 링크는 스캔 폴더 밖 본문을 읽게 만들 수 있어 수집하지 않는다
+            if os.path.islink(path):
+                continue
+            result.append(canonical_path(path))
     return result
+
+
+_FINGERPRINT_PREFIX = "classification_fingerprint:"
+
+
+def _fingerprint_key(folder_path: str) -> str:
+    # 폴더마다 따로 둔다. 다른 폴더를 스캔해도 이 폴더의 재분류 필요 여부가 지워지지 않는다
+    return _FINGERPRINT_PREFIX + hashlib.sha256(folder_path.encode()).hexdigest()
+
+
+def _classification_fingerprint(db: Session) -> str:
+    """분류 결과에 영향을 주는 설정의 지문. 달라지면 변경 없는 파일도 다시 분류한다"""
+    settings = {
+        "version": pipeline.CLASSIFIER_VERSION,
+        "rules": sorted((r.priority, r.type, r.value, r.folder_name) for r in db.query(Rule).all()),
+        "extensions": sorted((e.extension, e.category) for e in db.query(CustomExtension).all()),
+        "categories": sorted((c.name, c.keywords) for c in db.query(CustomCategory).all()),
+        "keywords": sorted(k.keyword for k in db.query(SensitiveKeyword).all()),
+        "settings": sorted(
+            (s.key, s.value) for s in db.query(AppSetting).all() if not s.key.startswith(_FINGERPRINT_PREFIX)
+        ),
+    }
+    return hashlib.sha256(json.dumps(settings, ensure_ascii=False).encode()).hexdigest()
+
+
+def _settings_changed(db: Session, folder_path: str, fingerprint: str) -> bool:
+    stored = db.query(AppSetting).filter(AppSetting.key == _fingerprint_key(folder_path)).first()
+    return stored is None or stored.value != fingerprint
+
+
+def _has_auto_classification(db: Session, file_id: int) -> bool:
+    query = db.query(Classification).filter(
+        Classification.file_id == file_id, Classification.is_manual == False,
+    )
+    return query.first() is not None
 
 
 def _get_metadata(file_path: str) -> dict:
@@ -74,6 +120,11 @@ async def run_scan(
     db: Session = SessionLocal()
 
     try:
+        # 해결되지 않은 이동 위에 새 파일 행이 생기면 나중에 조정할 수 없다
+        if reconcile_pending(db):
+            yield {"stage": -1, "message": "완료되지 않은 파일 이동을 먼저 확인해야 합니다", "total": 0, "completed": 0, "current_file": ""}
+            return
+
         # Stage 1: 파일 목록 수집
         yield {"stage": 1, "message": "파일 목록 수집 중", "total": 0, "completed": 0, "current_file": ""}
 
@@ -87,7 +138,10 @@ async def run_scan(
             for row in custom_cat_rows
         ]
         await asyncio.to_thread(tier2_embedding.load_custom_categories, custom_cat_list)
-        custom_category_names = [row.name for row in custom_cat_rows] or None
+        tier3 = tier3_llm.make_session(db, [row.name for row in custom_cat_rows])
+        keywords = load_keywords(db)
+        fingerprint = _classification_fingerprint(db)
+        reclassify_all = _settings_changed(db, folder_path, fingerprint)
 
         # Stage 2: 메타데이터 분석 + DB 저장 (배치 commit)
         yield {"stage": 2, "message": "메타데이터 분석 중", "total": total, "completed": 0, "current_file": ""}
@@ -104,7 +158,12 @@ async def run_scan(
             existing = db.query(File).filter(File.path == fpath).first()
             if existing:
                 # mtime 또는 size가 달라진 파일만 dirty 표시 → Stage 5에서 재분류
-                if existing.modified_at != meta["modified_at"] or existing.size != meta["size"]:
+                if (
+                    reclassify_all
+                    or existing.modified_at != meta["modified_at"]
+                    or existing.size != meta["size"]
+                    or not _has_auto_classification(db, existing.id)
+                ):
                     dirty_files.add(fpath)
                 existing.filename = filename
                 existing.extension = extension
@@ -133,6 +192,12 @@ async def run_scan(
 
             file_records[fpath] = file_record
 
+            # 민감 파일은 저장된 본문까지 지우고 내용 없이 다시 분류한다
+            if is_sensitive(filename, keywords):
+                if file_record.id and purge_stored_content(db, file_record):
+                    dirty_files.add(fpath)
+                    db.commit()
+
             yield {"stage": 2, "message": "메타데이터 분석 중", "total": total, "completed": i + 1, "current_file": filename}
             await asyncio.sleep(0)
 
@@ -150,6 +215,11 @@ async def run_scan(
         cover_count = 0
         for i, fpath in enumerate(file_paths):
             filename = os.path.basename(fpath)
+            # 변경 없는 파일은 이전 결과를 쓰므로 다시 읽지 않는다
+            if fpath not in dirty_files or is_sensitive(filename, keywords):
+                cover_texts[fpath] = None
+                yield {"stage": 3, "message": "표지 탐지 중", "total": total, "completed": i + 1, "current_file": filename}
+                continue
             cover_text = await asyncio.to_thread(extract_cover_text, fpath)
             cover_texts[fpath] = cover_text
             if cover_text:
@@ -169,7 +239,7 @@ async def run_scan(
             extension = os.path.splitext(filename)[1].lower()
 
             text = None
-            if extension in TEXT_EXTRACTABLE:
+            if fpath in dirty_files and extension in TEXT_EXTRACTABLE and not is_sensitive(filename, keywords):
                 text = await asyncio.to_thread(extract_text, fpath)
                 if text:
                     file_record = file_records[fpath]
@@ -235,7 +305,7 @@ async def run_scan(
                 cover_text=cover_texts.get(fpath),
                 db=db,
                 manual_category=manual_category,
-                custom_category_names=custom_category_names,
+                tier3=tier3,
             )
 
             db.query(Classification).filter(
@@ -283,6 +353,9 @@ async def run_scan(
             )
             if cls and not cls.tag:
                 cls.tag = group_entry.auto_tag
+        db.commit()
+
+        db.merge(AppSetting(key=_fingerprint_key(folder_path), value=fingerprint))
         db.commit()
 
         # Stage 7: 완료

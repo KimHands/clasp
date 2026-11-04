@@ -6,7 +6,7 @@
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
-    "dev:electron": "concurrently \"vite\" \"wait-on http://localhost:5173 && NODE_ENV=development ./node_modules/.bin/electron .\"",
+    "dev:electron": "concurrently -k \"vite\" \"wait-on http://localhost:${CLASP_VITE_PORT:-5173} && NODE_ENV=development ./node_modules/.bin/electron .\"",
     "build": "vite build",
     "build:electron": "vite build && electron-builder",
     "lint": "eslint .",
@@ -37,11 +37,11 @@
         {
           "target": "dmg",
           "arch": [
-            "arm64",
-            "x64"
+            "arm64"
           ]
         }
-      ]
+      ],
+      "identity": null
     },
     "win": {
       "target": [
@@ -62,16 +62,9 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
-    "@radix-ui/react-dialog": "^1.1.15",
-    "@radix-ui/react-dropdown-menu": "^2.1.16",
     "@radix-ui/react-slot": "^1.2.4",
-    "@radix-ui/react-toast": "^1.2.15",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "cytoscape": "^3.33.1",
-    "cytoscape-compound-drag-and-drop": "^1.1.0",
-    "cytoscape-dagre": "^2.5.0",
-    "cytoscape-fcose": "^2.2.0",
     "lucide-react": "^0.575.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

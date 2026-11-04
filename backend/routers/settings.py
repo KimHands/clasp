@@ -1,5 +1,4 @@
 import json
-import os
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
@@ -7,7 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models.schema import CustomExtension, CustomCategory
+from models.schema import AppSetting, CustomExtension, CustomCategory, SensitiveKeyword
 from engines.tier1_rule import _EXT_CATEGORY_MAP
 from engines import tier3_llm
 from utils.response import ok
@@ -16,12 +15,18 @@ from utils.errors import ErrorCode, raise_error
 router = APIRouter(prefix="/settings", tags=["settings"])
 
 
-class ApiKeyRequest(BaseModel):
-    api_key: str
+class LocalLlmRequest(BaseModel):
+    enabled: bool
+    base_url: str
+    model: str
 
 
-class GeminiApiKeyRequest(BaseModel):
-    api_key: str
+class LocalLlmTestRequest(BaseModel):
+    base_url: str
+
+
+class SensitiveKeywordRequest(BaseModel):
+    keyword: str
 
 
 class CreateExtensionRequest(BaseModel):
@@ -38,36 +43,77 @@ class CreateCategoryRequest(BaseModel):
 DEFAULT_CATEGORIES = sorted(set(_EXT_CATEGORY_MAP.values()))
 
 
-@router.get("/llm-status")
-async def get_llm_status():
-    """현재 백엔드에 등록된 LLM API 키 상태 확인"""
+def _validated_llm_url(base_url: str) -> str:
+    try:
+        return tier3_llm.validate_local_base_url(base_url.strip())
+    except ValueError as e:
+        raise_error(ErrorCode.INVALID_TYPE, str(e))
+
+
+@router.get("/local-llm")
+async def get_local_llm(db: Session = Depends(get_db)):
+    """로컬 LLM 설정 조회"""
+    config = tier3_llm.load_config(db)
     return JSONResponse(content=ok({
-        "openai_configured": bool(os.environ.get("OPENAI_API_KEY")),
-        "gemini_configured": bool(os.environ.get("GEMINI_API_KEY")),
-        "active_provider": tier3_llm.get_active_provider(),
+        "enabled": config.enabled,
+        "base_url": config.base_url,
+        "model": config.model,
     }))
 
 
-@router.post("/api-key")
-async def set_api_key(body: ApiKeyRequest):
-    """Electron 메인 프로세스에서 OpenAI API Key를 런타임에 설정"""
-    key = body.api_key.strip()
-    if key:
-        os.environ["OPENAI_API_KEY"] = key
-    else:
-        os.environ.pop("OPENAI_API_KEY", None)
-    return JSONResponse(content=ok({"configured": bool(key)}))
+@router.post("/local-llm")
+async def save_local_llm(body: LocalLlmRequest, db: Session = Depends(get_db)):
+    """로컬 LLM 설정 저장. 이 컴퓨터를 가리키는 주소만 허용"""
+    base_url = _validated_llm_url(body.base_url)
+    model = body.model.strip()
+    if body.enabled and not model:
+        raise_error(ErrorCode.INVALID_TYPE, "모델을 선택해주세요")
+    values = {
+        "local_llm_enabled": "1" if body.enabled else "0",
+        "local_llm_base_url": base_url,
+        "local_llm_model": model,
+    }
+    for key, value in values.items():
+        db.merge(AppSetting(key=key, value=value))
+    db.commit()
+    return JSONResponse(content=ok({"enabled": body.enabled, "base_url": base_url, "model": model}))
 
 
-@router.post("/gemini-api-key")
-async def set_gemini_api_key(body: GeminiApiKeyRequest):
-    """Electron 메인 프로세스에서 Gemini API Key를 런타임에 설정"""
-    key = body.api_key.strip()
-    if key:
-        os.environ["GEMINI_API_KEY"] = key
-    else:
-        os.environ.pop("GEMINI_API_KEY", None)
-    return JSONResponse(content=ok({"configured": bool(key)}))
+@router.post("/local-llm/test")
+async def test_local_llm(body: LocalLlmTestRequest):
+    """로컬 LLM 연결 시험. 사용 가능한 모델 목록을 반환"""
+    base_url = _validated_llm_url(body.base_url)
+    models = await tier3_llm.list_models(base_url)
+    return JSONResponse(content=ok({"ok": models is not None, "models": models or []}))
+
+
+@router.get("/sensitive-keywords")
+async def list_sensitive_keywords(db: Session = Depends(get_db)):
+    """민감 파일 키워드 조회"""
+    rows = db.query(SensitiveKeyword).order_by(SensitiveKeyword.id).all()
+    return JSONResponse(content=ok({"keywords": [{"id": r.id, "keyword": r.keyword} for r in rows]}))
+
+
+@router.post("/sensitive-keywords")
+async def create_sensitive_keyword(body: SensitiveKeywordRequest, db: Session = Depends(get_db)):
+    """민감 파일 키워드 추가"""
+    keyword = body.keyword.strip()
+    if not keyword:
+        raise_error(ErrorCode.INVALID_TYPE, "키워드를 입력해주세요")
+    if db.query(SensitiveKeyword).filter(SensitiveKeyword.keyword == keyword).first():
+        raise_error(ErrorCode.CATEGORY_CONFLICT, f"'{keyword}'는 이미 등록된 키워드입니다")
+    row = SensitiveKeyword(keyword=keyword)
+    db.add(row)
+    db.commit()
+    return JSONResponse(content=ok({"id": row.id, "keyword": row.keyword}))
+
+
+@router.delete("/sensitive-keywords/{keyword_id}")
+async def delete_sensitive_keyword(keyword_id: int, db: Session = Depends(get_db)):
+    """민감 파일 키워드 삭제"""
+    db.query(SensitiveKeyword).filter(SensitiveKeyword.id == keyword_id).delete()
+    db.commit()
+    return JSONResponse(content=ok({"deleted_id": keyword_id}))
 
 
 @router.get("/extensions")
