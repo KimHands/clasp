@@ -14,7 +14,7 @@ import sys
 import tempfile
 
 logging.disable(logging.WARNING)
-os.environ["HOME"] = tempfile.mkdtemp(prefix="clasp-eval-home-")
+os.environ["HOME"] = os.environ["USERPROFILE"] = tempfile.mkdtemp(prefix="clasp-eval-home-")
 
 import fitz
 from docx import Document

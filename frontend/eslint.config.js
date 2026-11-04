@@ -5,7 +5,7 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', 'release', 'resources']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [
@@ -25,5 +25,14 @@ export default defineConfig([
     rules: {
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
     },
+  },
+  {
+    // shadcn/ui exports variants next to the component
+    files: ['src/components/ui/**/*.jsx'],
+    rules: { 'react-refresh/only-export-components': 'off' },
+  },
+  {
+    files: ['electron/**/*.cjs', 'vite.config.js'],
+    languageOptions: { globals: globals.node },
   },
 ])

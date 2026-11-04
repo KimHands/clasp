@@ -28,7 +28,7 @@ function flattenTree(tree, parentId = null) {
   return result
 }
 
-const useRuleStore = create((set, get) => ({
+const useRuleStore = create((set) => ({
   rules: [],
   tree: [],
 

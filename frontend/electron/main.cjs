@@ -48,7 +48,8 @@ function spawnBackend() {
     child.stderr.on('data', (d) => console.error('[Backend]', d.toString()))
     return child
   }
-  const bundlePath = path.join(process.resourcesPath, 'backend', 'clasp-backend')
+  const executable = process.platform === 'win32' ? 'clasp-backend.exe' : 'clasp-backend'
+  const bundlePath = path.join(process.resourcesPath, 'backend', executable)
   return spawn(bundlePath, [], { stdio: 'ignore', env: backendEnv() })
 }
 

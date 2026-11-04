@@ -1,4 +1,5 @@
 import asyncio
+import os
 
 import pytest
 from sqlalchemy.orm import sessionmaker
@@ -128,3 +129,14 @@ def test_file_without_previous_result_is_analyzed(home, db, monkeypatch, stub_em
     reads = _spy_reads(monkeypatch)
     _scan(db, monkeypatch, f"{home}/r", "s2")
     assert len(reads) == 1
+
+
+def test_scanning_other_folder_does_not_hide_settings_change(home, db, monkeypatch, stub_embeddings):
+    write(f"{home}/a/survey.csv", "a,b\n1,2\n")
+    os.makedirs(f"{home}/b")
+    _scan(db, monkeypatch, f"{home}/a", "s1")
+    db.add(Rule(priority=1, type="extension", value="csv", folder_name="설문"))
+    db.commit()
+    _scan(db, monkeypatch, f"{home}/b", "s2")
+    _scan(db, monkeypatch, f"{home}/a", "s3")
+    assert _latest(db, "s3").category == "설문"

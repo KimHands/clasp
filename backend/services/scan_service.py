@@ -61,7 +61,12 @@ def _collect_files(folder_path: str) -> list[str]:
     return result
 
 
-_FINGERPRINT_KEY = "classification_fingerprint"
+_FINGERPRINT_PREFIX = "classification_fingerprint:"
+
+
+def _fingerprint_key(folder_path: str) -> str:
+    # 폴더마다 따로 둔다. 다른 폴더를 스캔해도 이 폴더의 재분류 필요 여부가 지워지지 않는다
+    return _FINGERPRINT_PREFIX + hashlib.sha256(folder_path.encode()).hexdigest()
 
 
 def _classification_fingerprint(db: Session) -> str:
@@ -73,14 +78,14 @@ def _classification_fingerprint(db: Session) -> str:
         "categories": sorted((c.name, c.keywords) for c in db.query(CustomCategory).all()),
         "keywords": sorted(k.keyword for k in db.query(SensitiveKeyword).all()),
         "settings": sorted(
-            (s.key, s.value) for s in db.query(AppSetting).all() if s.key != _FINGERPRINT_KEY
+            (s.key, s.value) for s in db.query(AppSetting).all() if not s.key.startswith(_FINGERPRINT_PREFIX)
         ),
     }
     return hashlib.sha256(json.dumps(settings, ensure_ascii=False).encode()).hexdigest()
 
 
-def _settings_changed(db: Session, fingerprint: str) -> bool:
-    stored = db.query(AppSetting).filter(AppSetting.key == _FINGERPRINT_KEY).first()
+def _settings_changed(db: Session, folder_path: str, fingerprint: str) -> bool:
+    stored = db.query(AppSetting).filter(AppSetting.key == _fingerprint_key(folder_path)).first()
     return stored is None or stored.value != fingerprint
 
 
@@ -136,7 +141,7 @@ async def run_scan(
         tier3 = tier3_llm.make_session(db, [row.name for row in custom_cat_rows])
         keywords = load_keywords(db)
         fingerprint = _classification_fingerprint(db)
-        reclassify_all = _settings_changed(db, fingerprint)
+        reclassify_all = _settings_changed(db, folder_path, fingerprint)
 
         # Stage 2: 메타데이터 분석 + DB 저장 (배치 commit)
         yield {"stage": 2, "message": "메타데이터 분석 중", "total": total, "completed": 0, "current_file": ""}
@@ -350,7 +355,7 @@ async def run_scan(
                 cls.tag = group_entry.auto_tag
         db.commit()
 
-        db.merge(AppSetting(key=_FINGERPRINT_KEY, value=fingerprint))
+        db.merge(AppSetting(key=_fingerprint_key(folder_path), value=fingerprint))
         db.commit()
 
         # Stage 7: 완료

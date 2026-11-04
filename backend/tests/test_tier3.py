@@ -168,3 +168,15 @@ def test_slow_server_hits_total_limit(fake_llm, monkeypatch):
     session = _session(fake_llm.base_url)
     assert asyncio.run(session.classify("본문", "a.txt"))["category"] is None
     assert session._failures == 1
+
+
+def test_invalid_answers_also_stop_calls(fake_llm):
+    fake_llm.raw_content = "분류할 수 없습니다"
+    session = _session(fake_llm.base_url)
+
+    async def run():
+        for _ in range(4):
+            await session.classify("본문", "a.txt")
+
+    asyncio.run(run())
+    assert len(fake_llm.requests) == 2

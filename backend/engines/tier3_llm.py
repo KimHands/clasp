@@ -170,8 +170,13 @@ class Tier3Session:
             self._failures += 1
             logger.warning("로컬 LLM 호출 실패: %s", e)
             return _FAIL
+        result = validate_response(parse_response(content), self.allowed_categories)
+        if result is None:
+            self._failures += 1
+            logger.warning("로컬 LLM 응답을 쓸 수 없습니다: %s", filename)
+            return _FAIL
         self._failures = 0
-        return validate_response(parse_response(content), self.allowed_categories) or _FAIL
+        return result
 
     async def _complete(self, text: str, filename: str) -> str:
         url = validate_local_base_url(self.config.base_url)

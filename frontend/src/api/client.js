@@ -18,7 +18,7 @@ async function request(method, path, body = null) {
   let res
   try {
     res = await fetch(`${baseUrl}${path}`, options)
-  } catch (networkErr) {
+  } catch {
     // 백엔드 미기동 또는 네트워크 단절 시 명확한 오류 메시지
     const err = new Error('백엔드 서버에 연결할 수 없습니다. 앱을 재시작해 주세요.')
     err.code = 'NETWORK_ERROR'

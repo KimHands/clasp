@@ -70,7 +70,7 @@ Change `CLASSIFIER_VERSION` in `engines/pipeline.py` when classification logic c
 # Output: frontend/release/ (macOS DMG / Windows NSIS)
 ```
 
-Known broken: `backend/clasp_backend.spec` is not in the repository, so step 1 fails on a clean checkout.
+The macOS build targets the host architecture (arm64) and is not signed. The Windows branch is not verified by a real build yet.
 
 ---
 

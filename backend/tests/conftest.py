@@ -3,7 +3,7 @@ import tempfile
 
 # database.py creates the app data directory at import time, so HOME must be
 # replaced before any project module is imported.
-os.environ["HOME"] = tempfile.mkdtemp(prefix="clasp-test-home-")
+os.environ["HOME"] = os.environ["USERPROFILE"] = tempfile.mkdtemp(prefix="clasp-test-home-")
 
 from datetime import datetime
 
@@ -60,6 +60,7 @@ def add_scanned(db, path, scan_id="scan_t", category="문서", confidence=0.7) -
 @pytest.fixture
 def home(tmp_path, monkeypatch) -> str:
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     return os.path.realpath(tmp_path)
 
 

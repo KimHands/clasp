@@ -22,7 +22,6 @@ export default function Scan() {
 
   const {
     selectedFolder,
-    scanId,
     scanStatus,
     progress,
     setScanId,
@@ -34,21 +33,6 @@ export default function Scan() {
   const { reset: resetFiles } = useFileStore()
 
   const startedRef = useRef(false)
-
-  // 페이지 진입 시 자동 스캔 시작 (StrictMode 중복 실행 방지)
-  useEffect(() => {
-    if (!selectedFolder) {
-      navigate('/')
-      return
-    }
-    if (scanStatus === 'idle' && !startedRef.current) {
-      startedRef.current = true
-      handleStartScan()
-    }
-    return () => {
-      esRef.current?.close()
-    }
-  }, [])
 
   const handleStartScan = async () => {
     try {
@@ -79,10 +63,25 @@ export default function Scan() {
           setScanStatus('error')
         }
       )
-    } catch (err) {
+    } catch {
       setScanStatus('error')
     }
   }
+
+  // 페이지 진입 시 자동 스캔 시작 (StrictMode 중복 실행 방지)
+  useEffect(() => {
+    if (!selectedFolder) {
+      navigate('/')
+      return
+    }
+    if (scanStatus === 'idle' && !startedRef.current) {
+      startedRef.current = true
+      handleStartScan()
+    }
+    return () => {
+      esRef.current?.close()
+    }
+  }, [])
 
   const handleGoResult = () => {
     navigate('/result')
@@ -160,7 +159,6 @@ export default function Scan() {
             {STAGES.map((stage) => {
               const isDone = currentStage > stage.id || isCompleted
               const isActive = currentStage === stage.id && isScanning
-              const isPending = currentStage < stage.id && !isCompleted
 
               return (
                 <div key={stage.id} className="flex items-center gap-3">

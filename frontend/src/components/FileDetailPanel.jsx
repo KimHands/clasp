@@ -56,7 +56,7 @@ export default function FileDetailPanel({ file, onClose }) {
       updateStore(updated)
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
-    } catch (e) {
+    } catch {
       alert('저장에 실패했습니다.')
     } finally {
       setSaving(false)
