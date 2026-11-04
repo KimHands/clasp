@@ -11,16 +11,10 @@ permissions:
 jobs:
   backend:
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.experimental }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: macos-latest
-            experimental: false
-          # Windows 분기가 처음 실행되는 환경이라 안정될 때까지 실패해도 전체를 막지 않는다
-          - os: windows-latest
-            experimental: true
+        os: [macos-latest, windows-latest]
     defaults:
       run:
         working-directory: backend

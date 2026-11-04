@@ -43,8 +43,8 @@ def test_preview_reports_stale_row_as_conflict(home, db):
 
 
 def test_stale_row_counts_as_occupied(home, db):
-    add_scanned(db, f"{home}/root/문서/a.txt")
-    assert is_occupied(db, f"{home}/root/문서/a.txt", own_file_id=None)
+    file = add_scanned(db, f"{home}/root/문서/a.txt")
+    assert is_occupied(db, file.path, own_file_id=None)
 
 
 def test_own_row_does_not_count_as_occupied(home, db):
