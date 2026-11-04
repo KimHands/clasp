@@ -18,6 +18,7 @@ class ErrorCode:
     EXTENSION_NOT_FOUND = "EXTENSION_NOT_FOUND"
     CATEGORY_CONFLICT = "CATEGORY_CONFLICT"
     CATEGORY_NOT_FOUND = "CATEGORY_NOT_FOUND"
+    MOVES_UNRESOLVED = "MOVES_UNRESOLVED"
 
 
 ERROR_HTTP_STATUS = {
@@ -37,6 +38,7 @@ ERROR_HTTP_STATUS = {
     ErrorCode.EXTENSION_NOT_FOUND: 404,
     ErrorCode.CATEGORY_CONFLICT: 409,
     ErrorCode.CATEGORY_NOT_FOUND: 404,
+    ErrorCode.MOVES_UNRESOLVED: 409,
 }
 
 ERROR_MESSAGES = {
@@ -56,6 +58,7 @@ ERROR_MESSAGES = {
     ErrorCode.EXTENSION_NOT_FOUND: "해당 확장자 ID 없음",
     ErrorCode.CATEGORY_CONFLICT: "동일한 카테고리 이름이 이미 존재함",
     ErrorCode.CATEGORY_NOT_FOUND: "해당 카테고리 ID 없음",
+    ErrorCode.MOVES_UNRESOLVED: "완료되지 않은 파일 이동을 먼저 확인해야 합니다",
 }
 
 

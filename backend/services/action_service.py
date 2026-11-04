@@ -7,6 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from models.schema import File, Classification, ActionLog, ActionBatch, ActionLogIdentity, Rule
+from services.move_recovery import reconcile_pending
 from services.safe_move import inode_of, move_no_clobber
 from utils.errors import ErrorCode, raise_error
 from utils.paths import is_within, validate_folder_path
@@ -357,6 +358,12 @@ def build_preview(db: Session, scan_id: str, folder_path: str) -> dict:
     }
 
 
+def _require_reconciled(db: Session) -> None:
+    """해결되지 않은 이동 위에 새 작업이 쌓이면 나중에 조정할 수 없어 막는다"""
+    if reconcile_pending(db):
+        raise_error(ErrorCode.MOVES_UNRESOLVED)
+
+
 def apply_organize(
     db: Session,
     scan_id: str,
@@ -367,6 +374,7 @@ def apply_organize(
     UC-06: 정리 적용 실행
     파일 이동 후 ActionBatch + ActionLog 저장
     """
+    _require_reconciled(db)
     rules = db.query(Rule).order_by(Rule.priority).all()
     rows = _get_best_classifications(db, scan_id)
 
@@ -494,6 +502,7 @@ def undo_organize(db: Session, action_log_id: str) -> dict:
     """
     UC-07: 되돌리기 — action_logs 역방향 이동 + 배치 상태 갱신
     """
+    _require_reconciled(db)
     batch = (
         db.query(ActionBatch)
         .filter(ActionBatch.action_log_id == action_log_id)

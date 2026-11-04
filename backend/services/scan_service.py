@@ -11,6 +11,7 @@ from models.schema import File, Classification, CoverSimilarityGroup, CustomCate
 from utils.text_extractor import extract_text
 from utils.cover_detector import extract_cover_text
 from services.cover_service import save_cover, compute_similarity_groups
+from services.move_recovery import reconcile_pending
 from engines import pipeline
 from engines import tier2_embedding
 
@@ -78,6 +79,11 @@ async def run_scan(
     db: Session = SessionLocal()
 
     try:
+        # 해결되지 않은 이동 위에 새 파일 행이 생기면 나중에 조정할 수 없다
+        if reconcile_pending(db):
+            yield {"stage": -1, "message": "완료되지 않은 파일 이동을 먼저 확인해야 합니다", "total": 0, "completed": 0, "current_file": ""}
+            return
+
         # Stage 1: 파일 목록 수집
         yield {"stage": 1, "message": "파일 목록 수집 중", "total": 0, "completed": 0, "current_file": ""}
 
