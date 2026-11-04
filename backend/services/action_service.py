@@ -3,9 +3,12 @@ import re
 import uuid
 import shutil
 import logging
+from datetime import datetime
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from models.schema import File, Classification, ActionLog, ActionBatch, Rule
+from models.schema import File, Classification, ActionLog, ActionBatch, ActionLogIdentity, Rule
+from services.safe_move import inode_of, move_no_clobber
 from utils.errors import ErrorCode, raise_error
 from utils.paths import is_within, validate_folder_path
 
@@ -135,10 +138,6 @@ def _get_destination(
     folder = os.path.join(base_dir, *parts)
     dest = os.path.join(folder, safe_filename)
 
-    # base_dir 범위 이탈 방지 (최종 이중 검증)
-    if not is_within(dest, base_dir):
-        dest = os.path.join(base_dir, "기타", safe_filename)
-
     return dest
 
 
@@ -150,14 +149,10 @@ def _resolve_conflict(
 ) -> str | None:
     """
     충돌 해결 전략 적용
-    - overwrite: 그대로 덮어쓰기
     - rename: 파일명에 번호 추가 (report_1.pdf)
     - skip: None 반환 → 이동 건너뜀
     """
     if not is_occupied(db, dest_path, own_file_id):
-        return dest_path
-
-    if resolution == "overwrite":
         return dest_path
 
     if resolution == "skip":
@@ -171,6 +166,23 @@ def _resolve_conflict(
         if counter > 1000:
             return None
     return f"{base}_{counter}{ext}"
+
+
+def _changed_since_scan(file: File) -> bool:
+    """스캔한 뒤 같은 경로의 파일이 바뀌었으면 그 분류를 적용하지 않는다"""
+    try:
+        stat = os.lstat(file.path)
+    except OSError:
+        return False
+    if file.size is not None and stat.st_size != file.size:
+        return True
+    if file.modified_at is None:
+        return False
+    return datetime.fromtimestamp(stat.st_mtime) != file.modified_at
+
+
+def _not_movable(file: File) -> bool:
+    return os.path.islink(file.path) or _changed_since_scan(file)
 
 
 def _get_best_classifications(db: Session, scan_id: str) -> list[tuple]:
@@ -210,6 +222,83 @@ def _get_best_classifications(db: Session, scan_id: str) -> list[tuple]:
     return [(files_map[fid], cls) for fid, cls in best_cls.items() if fid in files_map]
 
 
+def _add_log(
+    db: Session,
+    action_log_id: str,
+    action_type: str,
+    source_path: str,
+    destination_path: str,
+) -> ActionLog:
+    log = ActionLog(
+        action_log_id=action_log_id,
+        action_type=action_type,
+        source_path=source_path,
+        destination_path=destination_path,
+        is_undone=False,
+    )
+    db.add(log)
+    db.commit()
+    return log
+
+
+def _finalize_move(db: Session, log: ActionLog, file: File, final_dest: str) -> None:
+    log.action_type = "move"
+    file.path = final_dest
+    db.commit()
+
+
+def _move_with_journal(
+    db: Session,
+    action_log_id: str,
+    file: File,
+    final_dest: str,
+) -> bool:
+    """
+    파일 식별값과 함께 pending 로그를 먼저 남기고 옮긴다.
+    최종 커밋이 실패하면 파일은 이미 옮겨졌으므로 pending을 남겨 조정 절차에 맡긴다.
+    """
+    source_path = file.path
+    try:
+        inode = inode_of(source_path)
+    except OSError as e:
+        logger.warning("파일 확인 실패 %s: %s", source_path, e)
+        _add_log(db, action_log_id, "failed", source_path, final_dest)
+        return False
+
+    log = ActionLog(
+        action_log_id=action_log_id,
+        action_type="pending",
+        source_path=source_path,
+        destination_path=final_dest,
+        is_undone=False,
+        identity=ActionLogIdentity(inode=inode),
+    )
+    db.add(log)
+    try:
+        db.commit()
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.warning("이동 기록 실패 %s: %s", source_path, e)
+        return False
+
+    try:
+        os.makedirs(os.path.dirname(final_dest), exist_ok=True)
+        move_no_clobber(source_path, final_dest)
+    except OSError as e:
+        logger.warning("파일 이동 실패 %s → %s: %s", source_path, final_dest, e)
+        log.action_type = "failed"
+        db.commit()
+        return False
+
+    try:
+        _finalize_move(db, log, file, final_dest)
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.warning("이동 완료 기록 실패 %s: %s", final_dest, e)
+        return False
+    return True
+
+
 def build_preview(db: Session, scan_id: str, folder_path: str) -> dict:
     """
     UC-06: 정리 적용 미리보기
@@ -230,7 +319,7 @@ def build_preview(db: Session, scan_id: str, folder_path: str) -> dict:
     preview_tree: dict[str, list] = {}
 
     for file, cls in rows:
-        if not cls or cls.confidence_score < UNCLASSIFIED_THRESHOLD:
+        if not cls or cls.confidence_score < UNCLASSIFIED_THRESHOLD or _not_movable(file):
             excluded_files += 1
             continue
 
@@ -291,7 +380,7 @@ def apply_organize(
     # 배치 레코드 선행 생성 (FK 제약 충족)
     batch = ActionBatch(
         action_log_id=action_log_id,
-        folder_path=folder_path,
+        folder_path=base_dir,
         scan_id=scan_id,
         conflict_resolution=conflict_resolution,
     )
@@ -308,50 +397,31 @@ def apply_organize(
             continue
 
         dest_path = _get_destination(file, cls, base_dir, rules)
+        if _not_movable(file):
+            skipped += 1
+            _add_log(db, action_log_id, "skip", file.path, dest_path)
+            continue
+
         if os.path.normpath(dest_path) == os.path.normpath(file.path):
             skipped += 1
+            continue
+
+        if not is_within(os.path.dirname(dest_path), base_dir):
+            failed += 1
+            logger.warning("정리 폴더 밖으로 나가는 경로: %s", dest_path)
+            _add_log(db, action_log_id, "failed", file.path, dest_path)
             continue
 
         final_dest = _resolve_conflict(db, dest_path, conflict_resolution, file.id)
         if final_dest is None:
             skipped += 1
-            db.add(ActionLog(
-                action_log_id=action_log_id,
-                action_type="skip",
-                source_path=file.path,
-                destination_path=dest_path,
-                is_undone=False,
-            ))
-            db.commit()
+            _add_log(db, action_log_id, "skip", file.path, dest_path)
             continue
 
-        original_path = file.path
-        try:
-            os.makedirs(os.path.dirname(final_dest), exist_ok=True)
-            shutil.move(original_path, final_dest)
-        except Exception as e:
+        if _move_with_journal(db, action_log_id, file, final_dest):
+            moved += 1
+        else:
             failed += 1
-            logger.warning("파일 이동 실패 %s → %s: %s", original_path, final_dest, e)
-            db.add(ActionLog(
-                action_log_id=action_log_id,
-                action_type="failed",
-                source_path=original_path,
-                destination_path=final_dest,
-                is_undone=False,
-            ))
-            db.commit()
-            continue
-
-        file.path = final_dest
-        db.add(ActionLog(
-            action_log_id=action_log_id,
-            action_type="move",
-            source_path=original_path,
-            destination_path=final_dest,
-            is_undone=False,
-        ))
-        db.commit()
-        moved += 1
 
     # 배치 요약 갱신
     batch.moved_count = moved

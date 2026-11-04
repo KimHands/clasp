@@ -95,6 +95,15 @@ class ActionLog(Base):
     is_undone = Column(Boolean, default=False, nullable=False)
 
     batch = relationship("ActionBatch", back_populates="logs")
+    identity = relationship("ActionLogIdentity", uselist=False, cascade="all, delete-orphan")
+
+
+class ActionLogIdentity(Base):
+    """이동한 파일의 식별값 — 복구와 되돌리기에서 같은 파일인지 확인"""
+    __tablename__ = "action_log_identities"
+
+    log_id = Column(Integer, ForeignKey("action_logs.id"), primary_key=True)
+    inode = Column(String, nullable=False)
 
 
 class Rule(Base):

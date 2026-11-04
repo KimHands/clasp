@@ -6,6 +6,11 @@ class ConcurrentChange(OSError):
     """이동 도중 원본이 다른 파일로 바뀌어 원본을 지우지 않았음"""
 
 
+def inode_of(path: str) -> str:
+    """이동 후에도 유지되는 파일 식별값 (Windows 값은 정수 컬럼 범위를 넘을 수 있어 문자열)"""
+    return str(os.lstat(path).st_ino)
+
+
 def _is_same_file(a: str, b: str) -> bool:
     try:
         return os.path.samestat(os.lstat(a), os.lstat(b))
