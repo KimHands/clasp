@@ -22,6 +22,7 @@ UNCLASSIFIED_THRESHOLD = 0.31
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 100
 _MAX_FILENAME_LENGTH = 200
+_MAX_LABEL_LENGTH = 40
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 
 
@@ -47,6 +48,13 @@ def open_readonly_session():
     finally:
         session.close()
         engine.dispose()
+
+
+def _clean_label(label: str | None) -> str | None:
+    """카테고리와 폴더 이름도 DB에서 온 값이므로 줄바꿈, 경로, 긴 문장을 그대로 내보내지 않는다"""
+    if label is None:
+        return None
+    return re.sub(r"[/\\]", "_", _CONTROL_CHARS.sub(" ", label))[:_MAX_LABEL_LENGTH]
 
 
 def _validated_folder(folder_path: str) -> str:
@@ -93,7 +101,8 @@ def classification_summary(folder_path: str) -> dict:
         if _is_unclassified(cls):
             unclassified += 1
         else:
-            by_category[cls.category] = by_category.get(cls.category, 0) + 1
+            label = _clean_label(cls.category)
+            by_category[label] = by_category.get(label, 0) + 1
     return {"total": len(rows), "unclassified": unclassified, "by_category": by_category, "by_tier": by_tier}
 
 
@@ -105,7 +114,7 @@ def _file_item(file: File, cls: Classification, keywords: list[str]) -> dict:
     item = {
         "file_id": file.id,
         "extension": file.extension,
-        "category": None if _is_unclassified(cls) else cls.category,
+        "category": None if _is_unclassified(cls) else _clean_label(cls.category),
         "tier_used": cls.tier_used,
         "confidence_score": round(cls.confidence_score, 3),
         "is_manual": cls.is_manual,
@@ -153,13 +162,12 @@ def organize_plan(folder_path: str) -> dict:
             raise ValueError(e.detail["error"]["message"]) from e
     return {
         "applied": False,
-        "scan_id": scan_id,
         "files_to_move": preview["total_files"],
         "excluded_files": preview["excluded_files"],
         "folders_to_create": preview["folders_to_create"],
         "conflict_count": len(preview["conflicts"]),
         "folders": [
-            {"folder": entry["folder"], "file_count": len(entry["children"])}
+            {"folder": _clean_label(entry["folder"]), "file_count": len(entry["children"])}
             for entry in preview["preview_tree"]
         ],
     }
@@ -168,4 +176,5 @@ def organize_plan(folder_path: str) -> dict:
 def organize_history(folder_path: str) -> dict:
     folder = _validated_folder(folder_path)
     with open_readonly_session() as db:
-        return {"batches": get_folder_history(db, folder)}
+        history = get_folder_history(db, folder)
+    return {"batches": [{k: v for k, v in batch.items() if k != "scan_id"} for batch in history]}

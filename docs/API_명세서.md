@@ -605,6 +605,9 @@ GET /apply/history?folder_path={folder_path}
 | `GET /settings/sensitive-keywords` | 키워드 목록 |
 | `POST /settings/sensitive-keywords` | `{ "keyword": ... }` 추가. 중복이면 409 |
 | `DELETE /settings/sensitive-keywords/{id}` | 삭제 |
+| `GET`·`POST /settings/extensions`, `DELETE /settings/extensions/{id}` | 사용자 확장자 조회·추가·삭제 |
+| `GET`·`POST /settings/categories`, `DELETE /settings/categories/{id}` | 사용자 카테고리 조회·추가·삭제 |
+| `GET /health` | 상태 확인. 토큰이 필요하다 |
 
 ---
 

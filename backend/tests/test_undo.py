@@ -181,3 +181,8 @@ def test_history_finds_raw_and_normalized_path(home, db):
     history = get_folder_history(db, f"{home}/link")
     assert len(history) == 2
     assert {h["undo_state"] for h in history} == {"none"}
+
+
+def test_history_time_is_marked_as_utc(home, db):
+    _organize_one(home, db)
+    assert get_folder_history(db, f"{home}/r")[0]["executed_at"].endswith("Z")

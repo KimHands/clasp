@@ -337,7 +337,8 @@ def build_preview(db: Session, scan_id: str, folder_path: str) -> dict:
         total_files += 1
         dest_path = _get_destination(file, cls, base_dir, rules)
         dest_dir = os.path.dirname(dest_path)
-        folders_to_create.add(dest_dir)
+        if not os.path.isdir(dest_dir):
+            folders_to_create.add(dest_dir)
 
         if not same_path(dest_path, file.path) and is_occupied(db, dest_path, file.id):
             conflicts.append({
@@ -580,7 +581,8 @@ def _history_item(batch: ActionBatch) -> dict:
         "skipped_count": batch.skipped_count,
         "failed_count": sum(1 for log in batch.logs if log.action_type in ("failed", "unverified")),
         "conflict_resolution": batch.conflict_resolution,
-        "executed_at": batch.executed_at.isoformat() if batch.executed_at else None,
+        # DB에는 UTC가 시간대 없이 저장되므로 표시해 주지 않으면 화면이 현지 시각으로 읽는다
+        "executed_at": f"{batch.executed_at.isoformat()}Z" if batch.executed_at else None,
         "is_undone": state == "undone",
         "undo_state": state,
     }
