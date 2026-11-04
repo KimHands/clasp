@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from database import SessionLocal
 from models.schema import File, Classification, CoverSimilarityGroup, CustomCategory
+from utils.paths import canonical_path
 from utils.text_extractor import extract_text
 from utils.cover_detector import extract_cover_text
 from services.cover_service import save_cover, compute_similarity_groups
@@ -51,7 +52,7 @@ def _collect_files(folder_path: str) -> list[str]:
             # 심볼릭 링크는 스캔 폴더 밖 본문을 읽게 만들 수 있어 수집하지 않는다
             if os.path.islink(path):
                 continue
-            result.append(path)
+            result.append(canonical_path(path))
     return result
 
 

@@ -47,6 +47,14 @@ lsof -nP -iTCP:5173 -iTCP:8000 -sTCP:LISTEN
 
 Stop only the PIDs that belong to this repository.
 
+### Tests
+
+```bash
+cd backend
+venv/bin/pip install -r requirements-dev.txt
+venv/bin/python -m pytest
+```
+
 ### Production Build
 
 ```bash

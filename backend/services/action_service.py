@@ -10,7 +10,7 @@ from models.schema import File, Classification, ActionLog, ActionBatch, ActionLo
 from services.move_recovery import reconcile_pending
 from services.safe_move import inode_of, move_no_clobber
 from utils.errors import ErrorCode, raise_error
-from utils.paths import is_within, validate_folder_path
+from utils.paths import canonical_path, is_within, same_path, validate_folder_path
 
 logger = logging.getLogger(__name__)
 
@@ -237,8 +237,19 @@ def _add_log(
         is_undone=False,
     )
     db.add(log)
-    db.commit()
+    _try_commit(db, f"로그 저장 {action_type} {source_path}")
     return log
+
+
+def _try_commit(db: Session, context: str) -> bool:
+    """기록 실패가 요청 전체를 중단시키지 않게 한다. 남은 pending은 조정 절차가 정리한다"""
+    try:
+        db.commit()
+        return True
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.warning("기록 실패 (%s): %s", context, e)
+        return False
 
 
 def _finalize_move(db: Session, log: ActionLog, file: File, final_dest: str) -> None:
@@ -287,7 +298,7 @@ def _move_with_journal(
     except OSError as e:
         logger.warning("파일 이동 실패 %s → %s: %s", source_path, final_dest, e)
         log.action_type = "failed"
-        db.commit()
+        _try_commit(db, f"이동 실패 {source_path}")
         return False
 
     try:
@@ -328,7 +339,7 @@ def build_preview(db: Session, scan_id: str, folder_path: str) -> dict:
         dest_dir = os.path.dirname(dest_path)
         folders_to_create.add(dest_dir)
 
-        if dest_path != file.path and is_occupied(db, dest_path, file.id):
+        if not same_path(dest_path, file.path) and is_occupied(db, dest_path, file.id):
             conflicts.append({
                 "filename": file.filename,
                 "destination": dest_path,
@@ -409,7 +420,7 @@ def apply_organize(
             _add_log(db, action_log_id, "skip", file.path, dest_path)
             continue
 
-        if os.path.normpath(dest_path) == os.path.normpath(file.path):
+        if same_path(dest_path, file.path):
             skipped += 1
             continue
 
@@ -434,7 +445,7 @@ def apply_organize(
     batch.moved_count = moved
     batch.skipped_count = skipped
     batch.failed_count = failed
-    db.commit()
+    _try_commit(db, f"배치 요약 {action_log_id}")
 
     return {
         "moved": moved,
@@ -478,14 +489,15 @@ def _undo_one(db: Session, log: ActionLog, batch: ActionBatch | None) -> str | N
         return reason
 
     log.action_type = "undo_pending"
-    db.commit()
+    if not _try_commit(db, f"되돌리기 시작 {log.source_path}"):
+        return "move_failed"
     try:
         os.makedirs(os.path.dirname(log.source_path), exist_ok=True)
         move_no_clobber(log.destination_path, log.source_path)
     except OSError as e:
         logger.warning("되돌리기 실패 %s: %s", log.destination_path, e)
         log.action_type = "move"
-        db.commit()
+        _try_commit(db, f"되돌리기 복귀 {log.source_path}")
         return "source_occupied" if isinstance(e, FileExistsError) else "move_failed"
 
     try:
@@ -541,7 +553,7 @@ def undo_organize(db: Session, action_log_id: str) -> dict:
 
     if batch:
         batch.is_undone = all(log.is_undone for log in logs)
-        db.commit()
+        _try_commit(db, f"배치 되돌림 {action_log_id}")
 
     return {
         "restored": restored,
@@ -551,36 +563,39 @@ def undo_organize(db: Session, action_log_id: str) -> dict:
 
 
 def _undo_state(batch: ActionBatch) -> str:
-    moves = [log for log in batch.logs if log.action_type == "move"]
+    moves = [log for log in batch.logs if log.action_type in ("move", "undo_pending")]
     undone = sum(1 for log in moves if log.is_undone)
     if undone == 0:
         return "none"
     return "undone" if undone == len(moves) else "partial"
 
 
+def _history_item(batch: ActionBatch) -> dict:
+    # 요약 저장 전에 중단될 수 있어 건수와 되돌림 상태는 로그에서 계산한다
+    state = _undo_state(batch)
+    return {
+        "action_log_id": batch.action_log_id,
+        "scan_id": batch.scan_id,
+        "moved_count": sum(1 for log in batch.logs if log.action_type in ("move", "undo_pending")),
+        "skipped_count": batch.skipped_count,
+        "failed_count": sum(1 for log in batch.logs if log.action_type in ("failed", "unverified")),
+        "conflict_resolution": batch.conflict_resolution,
+        "executed_at": batch.executed_at.isoformat() if batch.executed_at else None,
+        "is_undone": state == "undone",
+        "undo_state": state,
+    }
+
+
 def get_folder_history(db: Session, folder_path: str) -> list[dict]:
     """
     특정 폴더의 전체 정리 이력 조회 (최신순)
-    과거 이력은 정규화 전 경로로 저장됐을 수 있어 두 경로로 찾는다
+    과거 이력은 정규화 전 경로로 저장됐을 수 있어 여러 표기로 찾는다
     """
+    real = os.path.realpath(folder_path)
     batches = (
         db.query(ActionBatch)
-        .filter(ActionBatch.folder_path.in_([folder_path, os.path.realpath(folder_path)]))
+        .filter(ActionBatch.folder_path.in_([folder_path, real, canonical_path(real)]))
         .order_by(ActionBatch.executed_at.desc())
         .all()
     )
-
-    return [
-        {
-            "action_log_id": b.action_log_id,
-            "scan_id": b.scan_id,
-            "moved_count": b.moved_count,
-            "skipped_count": b.skipped_count,
-            "failed_count": b.failed_count,
-            "conflict_resolution": b.conflict_resolution,
-            "executed_at": b.executed_at.isoformat() if b.executed_at else None,
-            "is_undone": b.is_undone,
-            "undo_state": _undo_state(b),
-        }
-        for b in batches
-    ]
+    return [_history_item(b) for b in batches]

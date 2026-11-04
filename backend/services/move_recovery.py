@@ -11,9 +11,10 @@ UNRESOLVED_TYPES = ("pending", "undo_pending")
 
 
 def _inode(path: str) -> str | None:
+    # 권한 오류는 "파일 없음"이 아니므로 전파해 미해결로 남긴다
     try:
         return str(os.lstat(path).st_ino)
-    except OSError:
+    except (FileNotFoundError, NotADirectoryError):
         return None
 
 
