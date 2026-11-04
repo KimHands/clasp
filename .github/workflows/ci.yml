@@ -33,7 +33,8 @@ jobs:
           cache-dependency-path: |
             backend/requirements.txt
             backend/requirements-dev.txt
-      - run: pip install -r requirements.txt -r requirements-dev.txt
+            backend/requirements-mcp.txt
+      - run: pip install -r requirements.txt -r requirements-dev.txt -r requirements-mcp.txt
       - run: python -m pytest
 
   evaluation:

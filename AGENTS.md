@@ -160,6 +160,10 @@ Manual classification (`is_manual=true`, `confidence_score=1.0`) also triggers `
 
 ---
 
+## Read-only MCP Server
+
+`backend/mcp_server/` exposes classification results over stdio (see `docs/mcp.md`). Do not add tools that move files, and do not return file names or content by default, because the client may be a cloud LLM.
+
 ## Coding Rules
 
 1. FastAPI route handlers must be `async`.

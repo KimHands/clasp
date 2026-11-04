@@ -14,7 +14,7 @@ analysis = Analysis(
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports + ["sklearn.metrics.pairwise"],
-    excludes=["tensorflow", "matplotlib", "IPython", "pytest", "tkinter", "eval", "tests"],
+    excludes=["tensorflow", "matplotlib", "IPython", "pytest", "tkinter", "eval", "tests", "mcp", "mcp_server"],
 )
 pyz = PYZ(analysis.pure)
 exe = EXE(pyz, analysis.scripts, [], exclude_binaries=True, name="clasp-backend", console=True)

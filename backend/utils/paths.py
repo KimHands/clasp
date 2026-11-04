@@ -3,6 +3,15 @@ import sys
 import unicodedata
 
 
+def app_data_dir() -> str:
+    """OS별 앱 데이터 디렉토리. PyInstaller 번들에서도 안정적으로 동작하도록 사용자 홈 기반"""
+    if sys.platform == "darwin":
+        return os.path.expanduser("~/Library/Application Support/Clasp")
+    if sys.platform == "win32":
+        return os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "Clasp")
+    return os.path.join(os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share")), "Clasp")
+
+
 def canonical_path(path: str) -> str:
     """
     macOS 파일시스템은 정규화 차이를 같은 파일로 보므로 NFC 한 형태로 통일한다.
