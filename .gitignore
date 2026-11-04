@@ -22,15 +22,13 @@ venv/
 env/
 .env
 *.egg-info/
-dist/
-build/
 .pytest_cache/
 .mypy_cache/
 
 # PyInstaller
 *.spec
-backend/dist/
-backend/build/
+!backend/clasp_backend.spec
+frontend/resources/
 
 # Environment variables
 .env
@@ -52,6 +50,13 @@ backend/build/
 .DS_Store
 Thumbs.db
 
+# Local agent settings and tool state
+.claude/settings.local.json
+.cursor/
+.bkit-memory.json
+.pdca-status.json
+.pdca-snapshots/
+
 # Logs
 logs/
 *.log
@@ -61,7 +66,7 @@ electron-builder.env
 
 # Model cache (sentence-transformers)
 .cache/
-models/
+/models/
 
 # Temporary files
 tmp/

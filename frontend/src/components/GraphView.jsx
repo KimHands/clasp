@@ -4,7 +4,7 @@ import {
   Image, Video, Music, Archive, HelpCircle, Tag,
   AlertTriangle, File, RotateCcw, Maximize2,
 } from 'lucide-react'
-import { buildMindmapTree } from '@/graph/cytoscapeConfig'
+import { buildMindmapTree } from '@/graph/mindmapTree'
 import useThemeStore from '@/store/themeStore'
 
 const ICON_MAP = {

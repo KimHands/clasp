@@ -21,9 +21,8 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          cytoscape: ['cytoscape', 'cytoscape-fcose'],
           vendor: ['react', 'react-dom', 'react-router-dom'],
-          ui: ['@radix-ui/react-slot', '@radix-ui/react-dialog', 'lucide-react'],
+          ui: ['@radix-ui/react-slot', 'lucide-react'],
         },
       },
     },
