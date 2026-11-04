@@ -15,6 +15,11 @@ _NON_TEXT_EXTENSIONS = {
 UNCLASSIFIED_THRESHOLD = 0.31
 # T3 API 호출을 skip할 신뢰도 기준 — T1/T2가 이 이상이면 LLM 불필요
 _T3_SKIP_THRESHOLD = 0.85
+# 수동 분류(1.0)보다 항상 낮게 유지한다
+_AGREEMENT_BONUS = 0.05
+_AGREEMENT_MAX = 0.95
+# 분류 방식을 바꾸면 올린다. 변경 없는 파일도 다음 스캔에서 다시 분류된다
+CLASSIFIER_VERSION = 2
 
 
 async def classify(
@@ -67,7 +72,10 @@ async def classify(
 
     # T1 + T2 결과 조합 → best 선정
     if t1["category"] and t2["category"] and t1["category"] == t2["category"]:
-        boosted_score = min(1.0, (t1["confidence_score"] + t2["confidence_score"]) / 2 + 0.10)
+        boosted_score = min(
+            _AGREEMENT_MAX,
+            max(t1["confidence_score"], t2["confidence_score"]) + _AGREEMENT_BONUS,
+        )
         content_tag = infer_tag(tag_source, t1["category"])
         best = {
             "category": t1["category"],

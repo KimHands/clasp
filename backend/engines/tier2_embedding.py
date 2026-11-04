@@ -32,9 +32,8 @@ CATEGORY_KEYWORDS = {
     ],
     "코드": [
         "프로그래밍", "programming", "코드", "함수", "클래스",
-        "알고리즘", "algorithm", "보안", "security", "데이터베이스",
-        "database", "네트워크", "network", "머신러닝", "machine learning",
-        "운영체제", "OS", "소스코드", "개발", "구현",
+        "알고리즘 구현", "소스코드", "구현", "리팩터링", "변수",
+        "컴파일", "디버깅", "스크립트", "source code", "function",
     ],
     "데이터": [
         "데이터", "data", "분석", "CSV", "JSON", "XML",

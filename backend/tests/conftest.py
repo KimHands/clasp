@@ -181,6 +181,7 @@ def stub_embeddings(monkeypatch):
     from services import cover_service
 
     monkeypatch.setattr(tier2_embedding, "load_custom_categories", lambda categories: None)
+    monkeypatch.setattr(tier2_embedding, "apply_feedback", lambda text, category: None)
     monkeypatch.setattr(
         tier2_embedding,
         "run",

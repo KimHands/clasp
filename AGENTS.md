@@ -55,6 +55,14 @@ venv/bin/pip install -r requirements-dev.txt
 venv/bin/python -m pytest
 ```
 
+Classification evaluation (see `docs/evaluation.md`):
+
+```bash
+venv/bin/python -m eval.run --split tune
+```
+
+Change `CLASSIFIER_VERSION` in `engines/pipeline.py` when classification logic changes, so unchanged files are reclassified.
+
 ### Production Build
 
 ```bash
@@ -87,13 +95,15 @@ Electron Shell (main.cjs)
 ```
 Tier 1 — Rule-based (always runs)
   Sources in order: manual classification (1.0) → user rules (0.85)
-                    → filename patterns (0.82) → extensions, built-in and custom (0.70)
+                    → specific format extensions, built-in and custom (0.85)
+                    → filename patterns on general formats (0.82)
+                    → general formats such as pdf, docx, txt (0.50)
   A manual classification returns immediately
 
 Tier 2 — sentence-transformers embedding + cosine similarity
   model: paraphrase-multilingual-MiniLM-L12-v2
   Runs when extracted or cover text is available
-  T1 + T2 agree on category → avg(T1, T2) + 0.10, capped at 1.0
+  T1 + T2 agree on category → max(T1, T2) + 0.05, capped at 0.95
   Otherwise T2 wins only when its score is higher than T1
 
 Tier 3 — local LLM over an OpenAI-compatible API, off by default
