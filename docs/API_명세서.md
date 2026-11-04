@@ -17,10 +17,10 @@
 
 ## 1. 개요
 
-- **Base URL**: `http://localhost:8000`
+- **Base URL**: `http://127.0.0.1:<port>`. 포트는 실행마다 Electron이 정한다
 - **프로토콜**: HTTP/1.1 (SSE 포함)
 - **데이터 형식**: JSON (SSE는 text/event-stream)
-- **인증**: 없음 (로컬 전용 앱)
+- **인증**: 실행마다 Electron이 만드는 토큰을 `X-Clasp-Token` 헤더로 보낸다. 없거나 틀리면 401, Host가 루프백이 아니면 403
 
 ---
 
@@ -595,7 +595,20 @@ GET /apply/history?folder_path={folder_path}
 
 ---
 
-## 7. 에러 코드
+## 7. 로컬 LLM·민감 키워드 설정
+
+| 요청 | 설명 |
+|---|---|
+| `GET /settings/local-llm` | `enabled`, `base_url`, `model` 조회 |
+| `POST /settings/local-llm` | 저장. 루프백 주소가 아니면 `INVALID_TYPE` |
+| `POST /settings/local-llm/test` | `{ "base_url": ... }`로 연결 시험. `ok`, `models` 반환 |
+| `GET /settings/sensitive-keywords` | 키워드 목록 |
+| `POST /settings/sensitive-keywords` | `{ "keyword": ... }` 추가. 중복이면 409 |
+| `DELETE /settings/sensitive-keywords/{id}` | 삭제 |
+
+---
+
+## 8. 에러 코드
 
 | 에러 코드 | HTTP 상태 | 설명 |
 |---|---|---|

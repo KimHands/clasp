@@ -1,94 +1,68 @@
-const { app, BrowserWindow, ipcMain, dialog, safeStorage } = require('electron')
-const path = require('path')
-const fs = require('fs')
+const { app, BrowserWindow, ipcMain, dialog } = require('electron')
+const crypto = require('crypto')
 const http = require('http')
+const net = require('net')
+const path = require('path')
 const { spawn } = require('child_process')
 
 const isDev = process.env.NODE_ENV === 'development'
-
-function getSettingsPath() {
-  return path.join(app.getPath('userData'), 'clasp-settings.json')
-}
-
-// 암호화 저장 대상 키 목록
-const ENCRYPTED_SETTING_KEYS = ['openai_api_key', 'gemini_api_key']
-
-function loadSettings() {
-  try {
-    const settingsPath = getSettingsPath()
-    if (fs.existsSync(settingsPath)) {
-      const raw = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'))
-      for (const key of ENCRYPTED_SETTING_KEYS) {
-        const encKey = `${key}_encrypted`
-        if (raw[encKey] && safeStorage.isEncryptionAvailable()) {
-          try {
-            raw[key] = safeStorage.decryptString(Buffer.from(raw[encKey], 'base64'))
-          } catch (_) {
-            raw[key] = null
-          }
-          delete raw[encKey]
-        }
-      }
-      return raw
-    }
-  } catch (_) {}
-  return {}
-}
-
-function saveSettings(data) {
-  try {
-    const settingsPath = getSettingsPath()
-    fs.mkdirSync(path.dirname(settingsPath), { recursive: true })
-    const toSave = { ...data }
-    if (safeStorage.isEncryptionAvailable()) {
-      for (const key of ENCRYPTED_SETTING_KEYS) {
-        if (toSave[key]) {
-          toSave[`${key}_encrypted`] = safeStorage.encryptString(toSave[key]).toString('base64')
-          delete toSave[key]
-        }
-      }
-    }
-    fs.writeFileSync(settingsPath, JSON.stringify(toSave, null, 2), 'utf-8')
-  } catch (e) {
-    console.error('[Settings] 저장 실패:', e.message)
-  }
-}
+const VITE_PORT = process.env.CLASP_VITE_PORT || '5173'
+const RENDERER_URL = `http://localhost:${VITE_PORT}`
 
 let mainWindow = null
 let backendProcess = null
 let backendAlive = false
+let backendPort = null
+// 실행마다 새로 만드는 토큰. 이 값을 가진 요청만 백엔드가 받는다
+const backendToken = crypto.randomBytes(32).toString('hex')
 
-function startBackend() {
-  if (backendProcess && backendAlive) return
+function findFreePort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer()
+    server.on('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address()
+      server.close(() => resolve(port))
+    })
+  })
+}
 
-  const settings = loadSettings()
-  const extraEnv = {}
-  if (settings.openai_api_key) {
-    extraEnv.OPENAI_API_KEY = settings.openai_api_key
+function backendEnv() {
+  return {
+    ...process.env,
+    CLASP_API_TOKEN: backendToken,
+    CLASP_PORT: String(backendPort),
+    CLASP_ALLOWED_ORIGIN: isDev ? RENDERER_URL : 'null',
   }
-  if (settings.gemini_api_key) {
-    extraEnv.GEMINI_API_KEY = settings.gemini_api_key
-  }
+}
 
+function spawnBackend() {
   if (isDev) {
     const backendDir = path.join(__dirname, '../../backend')
-    backendProcess = spawn(
+    const child = spawn(
       path.join(backendDir, 'venv/bin/python'),
-      ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', '8000'],
-      { cwd: backendDir, stdio: 'pipe', env: { ...process.env, ...extraEnv } }
+      ['-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', String(backendPort)],
+      { cwd: backendDir, stdio: 'pipe', env: backendEnv() }
     )
-    backendProcess.stdout.on('data', (d) => console.log('[Backend]', d.toString()))
-    backendProcess.stderr.on('data', (d) => console.error('[Backend]', d.toString()))
-  } else {
-    const bundlePath = path.join(process.resourcesPath, 'backend', 'clasp-backend')
-    backendProcess = spawn(bundlePath, [], {
-      stdio: 'pipe',
-      env: { ...process.env, ...extraEnv },
-    })
+    child.stdout.on('data', (d) => console.log('[Backend]', d.toString()))
+    child.stderr.on('data', (d) => console.error('[Backend]', d.toString()))
+    return child
   }
+  const bundlePath = path.join(process.resourcesPath, 'backend', 'clasp-backend')
+  return spawn(bundlePath, [], { stdio: 'ignore', env: backendEnv() })
+}
 
+async function startBackend() {
+  if (backendProcess && backendAlive) return
+  backendPort = backendPort || await findFreePort()
+  backendProcess = spawnBackend()
   backendAlive = true
 
+  backendProcess.on('error', (e) => {
+    console.error('[Backend] 실행 실패:', e.message)
+    backendAlive = false
+    backendProcess = null
+  })
   backendProcess.on('exit', (code) => {
     console.log(`[Backend] 종료 코드: ${code}`)
     backendAlive = false
@@ -96,32 +70,38 @@ function startBackend() {
   })
 }
 
-function waitForBackend(maxRetries = 30, intervalMs = 500) {
-  return new Promise((resolve, reject) => {
-    let attempts = 0
-    const check = () => {
-      attempts++
-      const req = http.get('http://127.0.0.1:8000/docs', (res) => {
-        res.resume()
-        if (res.statusCode === 200) {
-          resolve()
-        } else if (attempts < maxRetries) {
-          setTimeout(check, intervalMs)
-        } else {
-          reject(new Error('백엔드 응답 없음'))
-        }
-      })
-      req.on('error', () => {
-        if (attempts < maxRetries) {
-          setTimeout(check, intervalMs)
-        } else {
-          reject(new Error('백엔드 연결 실패'))
-        }
-      })
-      req.end()
-    }
-    check()
+function isClaspHealth(body) {
+  try {
+    return JSON.parse(body).service === 'clasp-backend'
+  } catch (_) {
+    return false
+  }
+}
+
+function checkBackendOnce() {
+  return new Promise((resolve) => {
+    const req = http.get(
+      {
+        hostname: '127.0.0.1', port: backendPort, path: '/health',
+        headers: { 'X-Clasp-Token': backendToken },
+      },
+      (res) => {
+        let body = ''
+        res.on('data', (chunk) => { body += chunk })
+        res.on('end', () => resolve(res.statusCode === 200 && isClaspHealth(body)))
+      }
+    )
+    req.on('error', () => resolve(false))
+    req.end()
   })
+}
+
+async function waitForBackend(maxRetries = 120, intervalMs = 500) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    if (await checkBackendOnce()) return
+    await new Promise((resolve) => setTimeout(resolve, intervalMs))
+  }
+  throw new Error('백엔드 응답 없음')
 }
 
 function createWindow() {
@@ -135,11 +115,19 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
     },
   })
 
+  // 파일 내용이 표시되는 창이 다른 사이트로 넘어가지 않게 막는다
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const allowed = isDev ? url.startsWith(`${RENDERER_URL}/`) : url.startsWith('file://')
+    if (!allowed) event.preventDefault()
+  })
+
   if (isDev) {
-    mainWindow.loadURL('http://localhost:5173')
+    mainWindow.loadURL(RENDERER_URL)
     mainWindow.webContents.openDevTools()
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
@@ -162,101 +150,35 @@ ipcMain.handle('dialog:openFolder', async () => {
   return result.filePaths[0]
 })
 
-// 허용된 설정 키 화이트리스트 (보안: 임의 env 설정 방지)
-const ALLOWED_ENV_KEYS = new Set(['OPENAI_API_KEY', 'GEMINI_API_KEY'])
+ipcMain.handle('backend:getConfig', () => ({
+  baseUrl: `http://127.0.0.1:${backendPort}`,
+  token: backendToken,
+}))
 
-// 각 env 키에 대응하는 백엔드 엔드포인트
-const API_KEY_ENDPOINTS = {
-  OPENAI_API_KEY: '/settings/api-key',
-  GEMINI_API_KEY: '/settings/gemini-api-key',
-}
-
-function postApiKeyToBackend(endpoint, value) {
-  return new Promise((resolve, reject) => {
-    const body = JSON.stringify({ api_key: value || '' })
-    const req = http.request(
-      {
-        hostname: '127.0.0.1', port: 8000, path: endpoint, method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-      },
-      (res) => { res.resume(); resolve() }
-    )
-    req.on('error', reject)
-    req.write(body)
-    req.end()
-  })
-}
-
-// IPC: 환경변수 설정 (백엔드 HTTP 엔드포인트 + 설정 파일 저장)
-ipcMain.handle('app:setEnv', async (_event, key, value) => {
-  if (!ALLOWED_ENV_KEYS.has(key)) {
-    return { success: false, reason: 'not_allowed' }
-  }
-
-  // 설정 파일에 저장 (앱 재시작 시에도 유지)
-  const settings = loadSettings()
-  const settingKey = key.toLowerCase()
-  if (value) {
-    settings[settingKey] = value
-  } else {
-    delete settings[settingKey]
-  }
-  saveSettings(settings)
-
-  // 실행 중인 백엔드에 HTTP로 전달 (재시작 없이 즉시 적용)
-  try {
-    const endpoint = API_KEY_ENDPOINTS[key]
-    if (endpoint) {
-      await postApiKeyToBackend(endpoint, value)
-    }
-  } catch (e) {
-    console.error('[Settings] 백엔드 API Key 전달 실패:', e.message)
-  }
-
-  return { success: true }
-})
-
-// IPC: 저장된 환경변수 읽기
-ipcMain.handle('app:getEnv', async (_event, key) => {
-  if (!ALLOWED_ENV_KEYS.has(key)) return null
-  const settings = loadSettings()
-  return settings[key.toLowerCase()] || null
-})
-
-// 앱 시작 시 저장된 API 키를 백엔드에 주입 (개발 환경에서 백엔드를 별도 실행하는 경우 대비)
-async function syncApiKeysToBackend() {
-  const settings = loadSettings()
-  const tasks = Object.entries(API_KEY_ENDPOINTS).map(([envKey, endpoint]) => {
-    const value = settings[envKey.toLowerCase()] || ''
-    return postApiKeyToBackend(endpoint, value).catch((e) => {
-      console.warn(`[Settings] ${envKey} 백엔드 동기화 실패:`, e.message)
-    })
-  })
-  await Promise.all(tasks)
-}
-
-app.whenReady().then(async () => {
-  startBackend()
+async function startBackendAndWait() {
+  await startBackend()
   try {
     await waitForBackend()
   } catch (e) {
     console.error('[Startup]', e.message)
   }
-  // 백엔드 준비 완료 후 저장된 키 주입
-  await syncApiKeysToBackend()
+}
+
+app.whenReady().then(async () => {
+  await startBackendAndWait()
   createWindow()
 
   app.on('activate', async () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      if (!backendAlive) {
-        startBackend()
-        try { await waitForBackend() } catch (_) {}
-        await syncApiKeysToBackend()
-      }
+      if (!backendAlive) await startBackendAndWait()
       createWindow()
     }
   })
 })
+
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, () => app.quit())
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

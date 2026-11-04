@@ -1,7 +1,8 @@
 import asyncio
 from sqlalchemy.orm import Session
 from typing import Optional
-from engines import tier1_rule, tier2_embedding, tier3_llm
+from engines import tier1_rule, tier2_embedding
+from engines.tier3_llm import Tier3Session
 from engines.tier2_embedding import infer_tag
 
 # 텍스트 추출이 불가능한 확장자 — 텍스트 없으면 Tier 1만 사용
@@ -24,11 +25,11 @@ async def classify(
     db: Session,
     manual_category: Optional[str] = None,
     cover_text: Optional[str] = None,
-    custom_category_names: list[str] | None = None,
+    tier3: Optional[Tier3Session] = None,
 ) -> dict:
     """
     Tier 1 → (수동 분류면 즉시 반환) → Tier 2 → best 선정
-    → (신뢰도 낮고 API Key 있으면) Tier 3.
+    → (신뢰도 낮고 로컬 LLM이 켜져 있으면) Tier 3.
     cover_text: 표지 탐지 결과 — 카테고리 분류는 본문 우선, 태그 추론은 표지 우선
     반환: { category, tag, tier_used, confidence_score }
     """
@@ -90,9 +91,9 @@ async def classify(
             content_tag = infer_tag(tag_source, t2["category"])
         best = {**t1, "tag": content_tag or t1["tag"], "tier_used": 1}
 
-    # ── Tier 3: 클라우드 LLM (API Key 있고 신뢰도가 낮을 때만 실행) ──
-    if tier3_llm.is_available() and best["confidence_score"] < _T3_SKIP_THRESHOLD:
-        t3 = await tier3_llm.run(t2_input, filename, extra_categories=custom_category_names)
+    # ── Tier 3: 로컬 LLM (켜져 있고 신뢰도가 낮을 때만 실행) ──
+    if tier3 and tier3.available and best["confidence_score"] < _T3_SKIP_THRESHOLD:
+        t3 = await tier3.classify(t2_input, filename)
         if t3.get("category") and t3["confidence_score"] > best["confidence_score"]:
             if not t3.get("tag"):
                 t3["tag"] = infer_tag(tag_source, t3["category"])

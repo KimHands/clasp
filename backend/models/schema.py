@@ -106,6 +106,21 @@ class ActionLogIdentity(Base):
     inode = Column(String, nullable=False)
 
 
+class AppSetting(Base):
+    __tablename__ = "app_settings"
+
+    key = Column(String, primary_key=True)
+    value = Column(String, nullable=False)
+
+
+class SensitiveKeyword(Base):
+    """파일명에 포함되면 내용을 읽지 않는 키워드"""
+    __tablename__ = "sensitive_keywords"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    keyword = Column(String, nullable=False, unique=True)
+
+
 class Rule(Base):
     __tablename__ = "rules"
 

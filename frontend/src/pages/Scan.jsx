@@ -74,7 +74,8 @@ export default function Scan() {
         () => {
           setScanStatus('completed')
         },
-        () => {
+        (err) => {
+          setProgress({ ...useScanStore.getState().progress, message: err.message })
           setScanStatus('error')
         }
       )

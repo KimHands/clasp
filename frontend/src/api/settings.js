@@ -1,15 +1,27 @@
 import { api } from './client'
 
-export async function getLlmStatus() {
-  return api.get('/settings/llm-status')
+export async function getLocalLlm() {
+  return api.get('/settings/local-llm')
 }
 
-export async function setOpenaiApiKey(apiKey) {
-  return api.post('/settings/api-key', { api_key: apiKey })
+export async function saveLocalLlm({ enabled, baseUrl, model }) {
+  return api.post('/settings/local-llm', { enabled, base_url: baseUrl, model })
 }
 
-export async function setGeminiApiKey(apiKey) {
-  return api.post('/settings/gemini-api-key', { api_key: apiKey })
+export async function testLocalLlm(baseUrl) {
+  return api.post('/settings/local-llm/test', { base_url: baseUrl })
+}
+
+export async function getSensitiveKeywords() {
+  return api.get('/settings/sensitive-keywords')
+}
+
+export async function createSensitiveKeyword(keyword) {
+  return api.post('/settings/sensitive-keywords', { keyword })
+}
+
+export async function deleteSensitiveKeyword(keywordId) {
+  return api.delete(`/settings/sensitive-keywords/${keywordId}`)
 }
 
 export async function getExtensions() {

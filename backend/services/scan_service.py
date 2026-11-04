@@ -13,8 +13,9 @@ from utils.text_extractor import extract_text
 from utils.cover_detector import extract_cover_text
 from services.cover_service import save_cover, compute_similarity_groups
 from services.move_recovery import reconcile_pending
+from services.sensitive import is_sensitive, load_keywords, purge_stored_content
 from engines import pipeline
-from engines import tier2_embedding
+from engines import tier2_embedding, tier3_llm
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +99,8 @@ async def run_scan(
             for row in custom_cat_rows
         ]
         await asyncio.to_thread(tier2_embedding.load_custom_categories, custom_cat_list)
-        custom_category_names = [row.name for row in custom_cat_rows] or None
+        tier3 = tier3_llm.make_session(db, [row.name for row in custom_cat_rows])
+        keywords = load_keywords(db)
 
         # Stage 2: 메타데이터 분석 + DB 저장 (배치 commit)
         yield {"stage": 2, "message": "메타데이터 분석 중", "total": total, "completed": 0, "current_file": ""}
@@ -144,6 +146,12 @@ async def run_scan(
 
             file_records[fpath] = file_record
 
+            # 민감 파일은 저장된 본문까지 지우고 내용 없이 다시 분류한다
+            if is_sensitive(filename, keywords):
+                if file_record.id and purge_stored_content(db, file_record):
+                    dirty_files.add(fpath)
+                    db.commit()
+
             yield {"stage": 2, "message": "메타데이터 분석 중", "total": total, "completed": i + 1, "current_file": filename}
             await asyncio.sleep(0)
 
@@ -161,6 +169,10 @@ async def run_scan(
         cover_count = 0
         for i, fpath in enumerate(file_paths):
             filename = os.path.basename(fpath)
+            if is_sensitive(filename, keywords):
+                cover_texts[fpath] = None
+                yield {"stage": 3, "message": "표지 탐지 중", "total": total, "completed": i + 1, "current_file": filename}
+                continue
             cover_text = await asyncio.to_thread(extract_cover_text, fpath)
             cover_texts[fpath] = cover_text
             if cover_text:
@@ -180,7 +192,7 @@ async def run_scan(
             extension = os.path.splitext(filename)[1].lower()
 
             text = None
-            if extension in TEXT_EXTRACTABLE:
+            if extension in TEXT_EXTRACTABLE and not is_sensitive(filename, keywords):
                 text = await asyncio.to_thread(extract_text, fpath)
                 if text:
                     file_record = file_records[fpath]
@@ -246,7 +258,7 @@ async def run_scan(
                 cover_text=cover_texts.get(fpath),
                 db=db,
                 manual_category=manual_category,
-                custom_category_names=custom_category_names,
+                tier3=tier3,
             )
 
             db.query(Classification).filter(
