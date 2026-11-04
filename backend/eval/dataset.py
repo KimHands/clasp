@@ -1,6 +1,6 @@
 """
 분류 평가용 합성 데이터. 모든 이름과 내용은 허구다.
-split은 정답을 보기 전에 고정했다. holdout은 임계값과 키워드 조정에 쓰지 않는다.
+split은 분류 로직을 고치기 전에 정했다. holdout은 임계값과 키워드 조정에 쓰지 않는다.
 """
 from dataclasses import dataclass
 

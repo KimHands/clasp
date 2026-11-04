@@ -95,3 +95,7 @@ def test_llm_prompt_separates_topic_from_format():
     code_line = next(line for line in prompt.split("\n") if line.startswith("- 코드"))
     assert "보안" not in code_line and "네트워크" not in code_line
     assert "주제와 상관없이" in prompt
+
+
+def test_filename_pattern_does_not_apply_to_unknown_extension(db):
+    assert _t1(db, "report.xyz")["category"] is None

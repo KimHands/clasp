@@ -139,12 +139,11 @@ def run(
     if ext_lower in merged_ext_map and ext_lower not in _GENERAL_FORMATS:
         return result(merged_ext_map[ext_lower], FORMAT_CONFIDENCE)
 
-    filename_no_ext = os.path.splitext(filename)[0]
-    for pattern, matched_category in _FILENAME_PATTERNS:
-        if pattern.search(filename_no_ext):
-            return result(matched_category, 0.82)
-
-    if ext_lower in merged_ext_map:
+    if ext_lower in _GENERAL_FORMATS:
+        filename_no_ext = os.path.splitext(filename)[0]
+        for pattern, matched_category in _FILENAME_PATTERNS:
+            if pattern.search(filename_no_ext):
+                return result(matched_category, 0.82)
         return result(merged_ext_map[ext_lower], CONTAINER_CONFIDENCE)
 
     return {

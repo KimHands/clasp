@@ -1,0 +1,8 @@
+{
+  "files": 38,
+  "llm_model": "qwen/qwen2.5-coder-7b",
+  "scan_stage": 7,
+  "connections": {
+    "socket.connect ('127.0.0.1', 1234)": 19
+  }
+}

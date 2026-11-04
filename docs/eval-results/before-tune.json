@@ -1,0 +1,20 @@
+{
+  "split": "tune",
+  "llm_model": null,
+  "total": 24,
+  "correct": 19,
+  "accuracy": 0.792,
+  "confident_wrong": 5,
+  "confident": 20,
+  "by_tier": {
+    "1": 20,
+    "2": 4
+  },
+  "errors": [
+    "scan_0412.pdf: 기대 프레젠테이션, 결과 문서 (T1, 0.7)",
+    "keynote_export.pdf: 기대 프레젠테이션, 결과 문서 (T1, 0.7)",
+    "paper_cup_order.xlsx: 기대 스프레드시트, 결과 문서 (T1, 0.82)",
+    "report_template.py: 기대 코드, 결과 문서 (T1, 0.82)",
+    "코드메모.md: 기대 코드, 결과 문서 (T1, 0.7)"
+  ]
+}

@@ -3,6 +3,7 @@
   python -m eval.run --split tune
   python -m eval.run --split holdout --min-accuracy 0.8
   python -m eval.run --llm-url http://127.0.0.1:1234/v1 --llm-model <모델>
+  python -m eval.run --output result.json
 """
 import argparse
 import asyncio
@@ -136,6 +137,7 @@ def main():
     parser.add_argument("--min-accuracy", type=float, default=None)
     parser.add_argument("--llm-url", default=None)
     parser.add_argument("--llm-model", default=None)
+    parser.add_argument("--output", default=None)
     args = parser.parse_args()
 
     items = [i for i in ITEMS if args.split == "all" or i.split == args.split]
@@ -151,7 +153,11 @@ def main():
         results = asyncio.run(_classify_all(items, folder, db, tier3))
 
     summary = summarize(results)
-    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    text = json.dumps({"split": args.split, "llm_model": args.llm_model, **summary}, ensure_ascii=False, indent=2)
+    print(text)
+    if args.output:
+        with open(args.output, "w", encoding="utf-8") as f:
+            f.write(text + "\n")
     if args.min_accuracy is not None and summary["accuracy"] < args.min_accuracy:
         sys.exit(1)
 

@@ -334,13 +334,17 @@ def build_preview(db: Session, scan_id: str, folder_path: str) -> dict:
             excluded_files += 1
             continue
 
-        total_files += 1
         dest_path = _get_destination(file, cls, base_dir, rules)
+        # 이미 제자리인 파일은 실제 적용에서도 옮기지 않으므로 세지 않는다
+        if same_path(dest_path, file.path):
+            continue
+
+        total_files += 1
         dest_dir = os.path.dirname(dest_path)
         if not os.path.isdir(dest_dir):
             folders_to_create.add(dest_dir)
 
-        if not same_path(dest_path, file.path) and is_occupied(db, dest_path, file.id):
+        if is_occupied(db, dest_path, file.id):
             conflicts.append({
                 "filename": file.filename,
                 "destination": dest_path,

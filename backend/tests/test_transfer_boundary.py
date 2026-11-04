@@ -24,7 +24,8 @@ def _imports(path):
 def _sources():
     for path in BACKEND.rglob("*.py"):
         relative = path.relative_to(BACKEND).parts
-        if relative[0] not in ("venv", "tests", "build", "dist"):
+        # eval은 앱에 포함되지 않는 측정 도구다
+        if relative[0] not in ("venv", "tests", "build", "dist", "eval"):
             yield path
 
 

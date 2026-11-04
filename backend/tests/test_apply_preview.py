@@ -59,3 +59,11 @@ def test_broken_symlink_counts_as_occupied(home, db):
 
 def test_preview_endpoint_requires_folder_path(client):
     assert client.get("/apply/preview", params={"scan_id": "scan_t"}).status_code == 422
+
+
+def test_preview_does_not_count_file_already_in_place(home, db):
+    add_scanned(db, write(f"{home}/root/문서/a.txt", "본문"))
+    add_scanned(db, write(f"{home}/root/b.txt", "본문"))
+    preview = build_preview(db, "scan_t", f"{home}/root")
+    assert preview["total_files"] == 1
+    assert [c["file"] for c in preview["preview_tree"][0]["children"]] == ["b.txt"]

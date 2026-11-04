@@ -1,0 +1,18 @@
+{
+  "split": "holdout",
+  "llm_model": null,
+  "total": 14,
+  "correct": 11,
+  "accuracy": 0.786,
+  "confident_wrong": 3,
+  "confident": 12,
+  "by_tier": {
+    "1": 13,
+    "2": 1
+  },
+  "errors": [
+    "1주차.pdf: 기대 프레젠테이션, 결과 문서 (T1, 0.7)",
+    "download (3).pdf: 기대 프레젠테이션, 결과 문서 (T1, 0.7)",
+    "utils_listing.pdf: 기대 코드, 결과 문서 (T1, 0.7)"
+  ]
+}
