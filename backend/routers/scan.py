@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from utils.response import ok, fail
 from utils.errors import ErrorCode
+from utils.paths import validate_folder_path
 from services import scan_service
 
 router = APIRouter(prefix="/scan", tags=["scan"])
@@ -29,22 +30,6 @@ def _cleanup_stale_scans():
         _active_scans.pop(sid, None)
 
 
-# Path Traversal 방지: 사용자 홈 디렉토리 하위만 허용
-_ALLOWED_ROOTS = [os.path.expanduser("~")]
-
-
-def _validate_folder_path(folder_path: str) -> str | None:
-    """
-    경로를 정규화하고 허용 범위 내인지 검증.
-    유효하면 정규화된 경로 반환, 아니면 None.
-    """
-    real = os.path.realpath(os.path.expanduser(folder_path))
-    for root in _ALLOWED_ROOTS:
-        if real.startswith(os.path.realpath(root) + os.sep) or real == os.path.realpath(root):
-            return real
-    return None
-
-
 class ScanStartRequest(BaseModel):
     folder_path: str
 
@@ -52,7 +37,7 @@ class ScanStartRequest(BaseModel):
 @router.post("/start")
 async def start_scan(body: ScanStartRequest):
     """UC-02: 스캔 시작"""
-    folder_path = _validate_folder_path(body.folder_path)
+    folder_path = validate_folder_path(body.folder_path)
 
     if folder_path is None:
         return JSONResponse(

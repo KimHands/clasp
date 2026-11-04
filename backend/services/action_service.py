@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from models.schema import File, Classification, ActionLog, ActionBatch, Rule
 from utils.errors import ErrorCode, raise_error
+from utils.paths import is_within, validate_folder_path
 
 logger = logging.getLogger(__name__)
 
@@ -22,18 +23,27 @@ def _sanitize_path_component(name: str) -> str:
     return sanitized or "기타"
 
 
-def _find_common_base(file_paths: list[str]) -> str:
-    """
-    파일 경로 목록에서 공통 스캔 루트 디렉토리 추출
-    첫 번째 파일의 부모를 사용하는 대신 os.path.commonpath로 정확한 루트 찾기
-    """
-    if not file_paths:
-        return os.sep
-    dirs = [os.path.dirname(p) for p in file_paths]
-    try:
-        return os.path.commonpath(dirs)
-    except ValueError:
-        return os.path.dirname(file_paths[0])
+def resolve_base_dir(folder_path: str, files: list[File]) -> str:
+    """요청 폴더를 정리 기준으로 확정. 대상 파일이 하나라도 벗어나면 전체 거부"""
+    base_dir = validate_folder_path(folder_path)
+    if base_dir is None:
+        raise_error(ErrorCode.PERMISSION_DENIED, "허용되지 않은 경로입니다")
+    if not os.path.isdir(base_dir):
+        raise_error(ErrorCode.FOLDER_NOT_FOUND)
+    # 파일 자체가 심볼릭 링크여도 판단이 흔들리지 않게 부모 폴더로 확인한다
+    if any(not is_within(os.path.dirname(f.path), base_dir) for f in files):
+        raise_error(ErrorCode.PERMISSION_DENIED, "정리 폴더 밖의 파일이 포함되어 있습니다")
+    return base_dir
+
+
+def is_occupied(db: Session, path: str, own_file_id: int | None) -> bool:
+    """디스크의 파일이나 다른 File 행이 경로를 쓰고 있는지 판단"""
+    if os.path.lexists(path):
+        return True
+    query = db.query(File).filter(File.path == path)
+    if own_file_id is not None:
+        query = query.filter(File.id != own_file_id)
+    return query.first() is not None
 
 
 def _match_rule(rule: Rule, file: File, cls: Classification | None) -> bool:
@@ -126,20 +136,25 @@ def _get_destination(
     dest = os.path.join(folder, safe_filename)
 
     # base_dir 범위 이탈 방지 (최종 이중 검증)
-    if not os.path.normpath(dest).startswith(os.path.normpath(base_dir)):
+    if not is_within(dest, base_dir):
         dest = os.path.join(base_dir, "기타", safe_filename)
 
     return dest
 
 
-def _resolve_conflict(dest_path: str, resolution: str) -> str | None:
+def _resolve_conflict(
+    db: Session,
+    dest_path: str,
+    resolution: str,
+    own_file_id: int | None,
+) -> str | None:
     """
     충돌 해결 전략 적용
     - overwrite: 그대로 덮어쓰기
     - rename: 파일명에 번호 추가 (report_1.pdf)
     - skip: None 반환 → 이동 건너뜀
     """
-    if not os.path.exists(dest_path):
+    if not is_occupied(db, dest_path, own_file_id):
         return dest_path
 
     if resolution == "overwrite":
@@ -151,7 +166,7 @@ def _resolve_conflict(dest_path: str, resolution: str) -> str | None:
     # rename: 중복 번호 부여 (상한 1000)
     base, ext = os.path.splitext(dest_path)
     counter = 1
-    while os.path.exists(f"{base}_{counter}{ext}"):
+    while is_occupied(db, f"{base}_{counter}{ext}", own_file_id):
         counter += 1
         if counter > 1000:
             return None
@@ -195,7 +210,7 @@ def _get_best_classifications(db: Session, scan_id: str) -> list[tuple]:
     return [(files_map[fid], cls) for fid, cls in best_cls.items() if fid in files_map]
 
 
-def build_preview(db: Session, scan_id: str) -> dict:
+def build_preview(db: Session, scan_id: str, folder_path: str) -> dict:
     """
     UC-06: 정리 적용 미리보기
     실제 파일 이동 없이 이동 계획 트리 반환
@@ -206,7 +221,7 @@ def build_preview(db: Session, scan_id: str) -> dict:
     if not rows:
         raise_error(ErrorCode.SCAN_NOT_FOUND, "해당 스캔 ID의 분류 결과 없음")
 
-    base_dir = _find_common_base([f.path for f, _ in rows])
+    base_dir = resolve_base_dir(folder_path, [f for f, _ in rows])
 
     total_files = 0
     excluded_files = 0
@@ -224,7 +239,7 @@ def build_preview(db: Session, scan_id: str) -> dict:
         dest_dir = os.path.dirname(dest_path)
         folders_to_create.add(dest_dir)
 
-        if os.path.exists(dest_path) and dest_path != file.path:
+        if dest_path != file.path and is_occupied(db, dest_path, file.id):
             conflicts.append({
                 "filename": file.filename,
                 "destination": dest_path,
@@ -270,7 +285,7 @@ def apply_organize(
     if not rows:
         raise_error(ErrorCode.SCAN_NOT_FOUND, "해당 스캔 ID의 분류 결과 없음")
 
-    base_dir = _find_common_base([f.path for f, _ in rows])
+    base_dir = resolve_base_dir(folder_path, [f for f, _ in rows])
     action_log_id = f"log_{uuid.uuid4().hex[:12]}"
 
     # 배치 레코드 선행 생성 (FK 제약 충족)
@@ -297,7 +312,7 @@ def apply_organize(
             skipped += 1
             continue
 
-        final_dest = _resolve_conflict(dest_path, conflict_resolution)
+        final_dest = _resolve_conflict(db, dest_path, conflict_resolution, file.id)
         if final_dest is None:
             skipped += 1
             db.add(ActionLog(

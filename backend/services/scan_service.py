@@ -46,7 +46,11 @@ def _collect_files(folder_path: str) -> list[str]:
             ext = os.path.splitext(fname)[1].lower()
             if ext in EXCLUDED_EXTENSIONS:
                 continue
-            result.append(os.path.join(root, fname))
+            path = os.path.join(root, fname)
+            # 심볼릭 링크는 스캔 폴더 밖 본문을 읽게 만들 수 있어 수집하지 않는다
+            if os.path.islink(path):
+                continue
+            result.append(path)
     return result
 
 
