@@ -1,7 +1,6 @@
 import os
 import re
 import uuid
-import shutil
 import logging
 from datetime import datetime
 from sqlalchemy.exc import SQLAlchemyError
@@ -437,6 +436,60 @@ def apply_organize(
     }
 
 
+def _undo_block_reason(
+    db: Session,
+    log: ActionLog,
+    batch: ActionBatch | None,
+    file: File | None,
+) -> str | None:
+    """되돌리면 안 되는 이유. 다른 파일을 옮기거나 덮어쓰지 않도록 이동 전에 확인"""
+    if not os.path.lexists(log.destination_path):
+        return "destination_file_not_found"
+    if log.identity and inode_of(log.destination_path) != log.identity.inode:
+        return "identity_mismatch"
+    if batch and not is_within(os.path.dirname(log.source_path), batch.folder_path):
+        return "source_outside_root"
+    if is_occupied(db, log.source_path, file.id if file else None):
+        return "source_occupied"
+    return None
+
+
+def _finalize_undo(db: Session, log: ActionLog, file: File | None) -> None:
+    log.action_type = "move"
+    log.is_undone = True
+    if file:
+        file.path = log.source_path
+    db.commit()
+
+
+def _undo_one(db: Session, log: ActionLog, batch: ActionBatch | None) -> str | None:
+    """로그 하나를 되돌리고 실패 사유를 반환. 성공하면 None"""
+    file = db.query(File).filter(File.path == log.destination_path).first()
+    reason = _undo_block_reason(db, log, batch, file)
+    if reason:
+        return reason
+
+    log.action_type = "undo_pending"
+    db.commit()
+    try:
+        os.makedirs(os.path.dirname(log.source_path), exist_ok=True)
+        move_no_clobber(log.destination_path, log.source_path)
+    except OSError as e:
+        logger.warning("되돌리기 실패 %s: %s", log.destination_path, e)
+        log.action_type = "move"
+        db.commit()
+        return "source_occupied" if isinstance(e, FileExistsError) else "move_failed"
+
+    try:
+        _finalize_undo(db, log, file)
+    except SQLAlchemyError as e:
+        # 파일은 이미 돌아왔으므로 undo_pending을 남겨 조정 절차에 맡긴다
+        db.rollback()
+        logger.warning("되돌리기 완료 기록 실패 %s: %s", log.source_path, e)
+        return "move_failed"
+    return None
+
+
 def undo_organize(db: Session, action_log_id: str) -> dict:
     """
     UC-07: 되돌리기 — action_logs 역방향 이동 + 배치 상태 갱신
@@ -463,60 +516,47 @@ def undo_organize(db: Session, action_log_id: str) -> dict:
         raise_error(ErrorCode.ALREADY_UNDONE)
 
     restored = 0
-    failed = 0
     unrestorable = []
 
     for log in logs:
         if log.is_undone:
             continue
-
-        if not os.path.exists(log.destination_path):
+        reason = _undo_one(db, log, batch)
+        if reason:
             unrestorable.append({
                 "filename": os.path.basename(log.destination_path),
-                "reason": "destination_file_not_found",
+                "reason": reason,
             })
-            failed += 1
-            continue
-
-        try:
-            dest = log.destination_path
-            src = log.source_path
-            os.makedirs(os.path.dirname(src), exist_ok=True)
-            shutil.move(dest, src)
-
-            file = db.query(File).filter(File.path == dest).first()
-            if file:
-                file.path = src
-                db.commit()
-
-            log.is_undone = True
-            db.commit()
+        else:
             restored += 1
-        except Exception:
-            failed += 1
-            unrestorable.append({
-                "filename": os.path.basename(log.destination_path),
-                "reason": "move_failed",
-            })
 
     if batch:
-        batch.is_undone = True
+        batch.is_undone = all(log.is_undone for log in logs)
         db.commit()
 
     return {
         "restored": restored,
-        "failed": failed,
+        "failed": len(unrestorable),
         "unrestorable": unrestorable,
     }
+
+
+def _undo_state(batch: ActionBatch) -> str:
+    moves = [log for log in batch.logs if log.action_type == "move"]
+    undone = sum(1 for log in moves if log.is_undone)
+    if undone == 0:
+        return "none"
+    return "undone" if undone == len(moves) else "partial"
 
 
 def get_folder_history(db: Session, folder_path: str) -> list[dict]:
     """
     특정 폴더의 전체 정리 이력 조회 (최신순)
+    과거 이력은 정규화 전 경로로 저장됐을 수 있어 두 경로로 찾는다
     """
     batches = (
         db.query(ActionBatch)
-        .filter(ActionBatch.folder_path == folder_path)
+        .filter(ActionBatch.folder_path.in_([folder_path, os.path.realpath(folder_path)]))
         .order_by(ActionBatch.executed_at.desc())
         .all()
     )
@@ -531,6 +571,7 @@ def get_folder_history(db: Session, folder_path: str) -> list[dict]:
             "conflict_resolution": b.conflict_resolution,
             "executed_at": b.executed_at.isoformat() if b.executed_at else None,
             "is_undone": b.is_undone,
+            "undo_state": _undo_state(b),
         }
         for b in batches
     ]
